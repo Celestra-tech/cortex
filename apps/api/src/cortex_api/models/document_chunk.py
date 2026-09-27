@@ -6,7 +6,8 @@ from sqlalchemy import CheckConstraint, Computed, ForeignKey, Index, Integer, St
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from cortex_api.database.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import CreatedAtMixin, UUIDPrimaryKeyMixin
 from cortex_api.models.memory import SEARCH_CONFIG
 
 if TYPE_CHECKING:

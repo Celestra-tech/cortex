@@ -342,7 +342,7 @@ retrieval lives in Cortex Knowledge, described above.
 
 ```
 src/cortex_api/
-  database/       config.py · base.py (Base + mixins) · session.py · ids.py (UUIDv7) · types.py
+  database/       config.py · base.py (Base) · mixins.py (id, timestamps, soft delete) · session.py · ids.py (UUIDv7) · types.py
   models/         organization · user · api_key · audit_log · conversation · message · memory · model_execution
                   document · document_chunk · embedding · knowledge_query
   repositories/   base.py (generic async CRUD) · memory_repository.py · execution_repository.py
@@ -351,7 +351,7 @@ src/cortex_api/
   services/router base (contracts) · registry · policies · fallback · router · service · providers/
   services/knowledge  extraction · chunker · embeddings · ingestion · hybrid_search · citations
                       assembler · service
-  schemas/        request/response models (memory.py, completion.py, knowledge.py, health.py)
+  schemas/        request/response models (organization.py, user.py, api_key.py, memory.py, …)
   api/            deps.py (settings, tenant, services) · errors.py · v1.py · routes/
   core/           settings, logging, health probes
 migrations/       Alembic (async)
@@ -374,6 +374,12 @@ migrations/       Alembic (async)
   `selectinload()`, because implicit lazy loads are errors under asyncio.
 - **Audit logs** are append-only: the repository rejects updates and deletes,
   and foreign keys use `ON DELETE SET NULL` so history outlives its subjects.
+- **Schemas** in `schemas/` validate input before it reaches the database, and
+  they mirror its constraints (slug format, lowercase email, role enum).
+  `*Update` models are partial: `changes()` returns only the fields the client
+  sent, ready for `repository.update(entity, **patch.changes())`.
+- **Migrations** must match the models. `alembic check` fails on any drift, and
+  the migration test runs it after upgrading to head.
 
 ```python
 from cortex_api.database import DbSession

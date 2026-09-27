@@ -5,8 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from cortex_api.models.api_key import ApiKey, ApiKeyRole
-from cortex_api.models.organization import SLUG_PATTERN
-from cortex_api.schemas.observatory import OrganizationRead
+from cortex_api.schemas.organization import OrganizationCreate, OrganizationRead
 
 ApiKeyStatus = Literal["active", "expired", "revoked"]
 MAX_GRACE_PERIOD_SECONDS = 7 * 24 * 3600
@@ -78,9 +77,7 @@ class ApiKeyListResponse(BaseModel):
     items: list[ApiKeyRead]
 
 
-class OrganizationCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    slug: str = Field(max_length=63, pattern=SLUG_PATTERN)
+class OrganizationBootstrapCreate(OrganizationCreate):
     key_name: str = Field(default="Admin", min_length=1, max_length=255)
 
 

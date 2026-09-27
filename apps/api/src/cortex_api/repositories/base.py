@@ -7,7 +7,8 @@ from sqlalchemy import ColumnElement, Select, func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
-from cortex_api.database.base import Base, SoftDeleteMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import SoftDeleteMixin
 
 
 class NotFoundError(LookupError):

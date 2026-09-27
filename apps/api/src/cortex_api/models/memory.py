@@ -6,7 +6,8 @@ from sqlalchemy import CheckConstraint, Computed, Float, ForeignKey, Index, Stri
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
-from cortex_api.database.base import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from cortex_api.database.types import string_enum
 
 SEARCH_CONFIG = "english"

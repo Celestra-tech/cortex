@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from cortex_api.database.base import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
 from cortex_api.database.types import string_enum
 
 if TYPE_CHECKING:

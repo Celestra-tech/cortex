@@ -54,6 +54,27 @@ async def test_organization_crud_with_soft_delete(session: AsyncSession) -> None
     assert await organizations.get(reused.id, include_deleted=True) is None
 
 
+async def test_list_is_ordered_and_bounded(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organizations = OrganizationRepository(session)
+    created = [await organizations.create(name=f"Org {i}", slug=f"org-{i}") for i in range(5)]
+    ids = [org.id for org in created]
+
+    assert [org.id for org in await organizations.list()] == ids
+    assert [org.id for org in await organizations.list(limit=2)] == ids[:2]
+    assert [org.id for org in await organizations.list(limit=2, offset=2)] == ids[2:4]
+    assert await organizations.list(offset=5) == []
+
+    monkeypatch.setattr(OrganizationRepository, "max_limit", 3)
+    assert len(await organizations.list(limit=10_000)) == 3
+
+    await organizations.delete(created[0])
+    assert len(await organizations.list(include_deleted=True)) == 3
+    assert await organizations.count(include_deleted=True) == 5
+    assert await organizations.count() == 4
+
+
 async def test_users_and_api_keys_are_scoped_to_organization(session: AsyncSession) -> None:
     organization = await OrganizationRepository(session).create(name="Acme", slug="acme")
     users = UserRepository(session)

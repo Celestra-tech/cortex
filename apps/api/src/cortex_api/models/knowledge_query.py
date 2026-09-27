@@ -17,7 +17,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from cortex_api.database.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import CreatedAtMixin, UUIDPrimaryKeyMixin
 from cortex_api.database.types import string_enum
 
 

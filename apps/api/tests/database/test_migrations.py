@@ -47,5 +47,8 @@ async def test_migrations_round_trip_and_match_models(
         async with engine.connect() as connection:
             drift = await connection.run_sync(_schema_drift)
         assert drift == [], f"models and migrations disagree: {drift}"
+
+        # What `alembic check` runs: autogenerate against the live schema must find nothing.
+        await asyncio.to_thread(command.check, alembic_config)
     finally:
         await engine.dispose()
