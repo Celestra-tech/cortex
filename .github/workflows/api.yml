@@ -72,12 +72,16 @@ jobs:
           revision="$(git rev-parse HEAD)"
           repo="${REGISTRY}/cortex-api"
           gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
-          echo "revision=${revision}" >>"$GITHUB_OUTPUT"
-          echo "repo=${repo}" >>"$GITHUB_OUTPUT"
-          echo "tag=${repo}:${revision}" >>"$GITHUB_OUTPUT"
+          {
+            echo "revision=${revision}"
+            echo "repo=${repo}"
+            echo "tag=${repo}:${revision}"
+          } >>"$GITHUB_OUTPUT"
           if digest="$(gcloud artifacts docker images describe "${repo}:${revision}" --format 'value(image_summary.digest)' 2>/dev/null)" && [ -n "$digest" ]; then
-            echo "exists=true" >>"$GITHUB_OUTPUT"
-            echo "image=${repo}@${digest}" >>"$GITHUB_OUTPUT"
+            {
+              echo "exists=true"
+              echo "image=${repo}@${digest}"
+            } >>"$GITHUB_OUTPUT"
             echo "Reusing ${repo}:${revision} (${digest})"
           else
             echo "exists=false" >>"$GITHUB_OUTPUT"
