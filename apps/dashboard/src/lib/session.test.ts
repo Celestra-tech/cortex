@@ -24,7 +24,7 @@ test("every seal is unique", async () => {
 test("tampered, foreign, malformed, and expired cookies are rejected", async () => {
   const sealed = await sealSession(SESSION, SECRET);
   const [iv, data] = sealed.split(".") as [string, string];
-  const flipped = `${iv}.${data.slice(0, -2)}${data.endsWith("A") ? "B" : "A"}${data.slice(-1)}`;
+  const flipped = `${iv}.${data.slice(0, -2)}${data.at(-2) === "A" ? "B" : "A"}${data.slice(-1)}`;
 
   expect(await openSession(flipped, SECRET, 1_900_000_000)).toBeNull();
   expect(await openSession(sealed, "another-secret-entirely-000000000", 1_900_000_000)).toBeNull();

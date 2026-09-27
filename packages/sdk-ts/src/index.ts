@@ -55,6 +55,7 @@ export type {
   UploadParams,
 } from "./documents";
 export type { Evidence, EvidenceDepthParams, EvidencePathParams } from "./evidence";
+export type { Scenarios } from "./scenarios";
 export type { ExecutionListParams, Router } from "./router";
 export type { LiveEventOptions, Observatory, System } from "./observatory";
 export type { ApiKeys } from "./api-keys";

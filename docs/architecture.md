@@ -46,7 +46,10 @@ organizations ─┬─< users ──────────┐
                ├─< model_executions   (grouped by completion_id)
                ├─< documents ─< document_chunks ─< embeddings
                ├─< knowledge_queries  (completion_id links grounded completions)
-               └─< evidence_nodes ─< evidence_edges >─ evidence_nodes
+               ├─< evidence_nodes ─< evidence_edges >─ evidence_nodes
+               └─< scenarios >─ decision_node_id (evidence_nodes, CASCADE)
+                     ├─< assumptions >─ evidence_node_id (SET NULL)
+                     └─< outcomes >─ assumption_id (SET NULL)
 ```
 
 | Table               | Notes                                                                                   |
@@ -65,6 +68,9 @@ organizations ─┬─< users ──────────┐
 | `knowledge_queries` | Retrieval log: latency split, candidates, confidence, results, citations used.          |
 | `evidence_nodes`    | Snapshots of decisions and their evidence; `ref_id` names the source record, no FK.     |
 | `evidence_edges`    | Typed links with provenance: confidence, explanation, source, `observed_at`.            |
+| `scenarios`         | One stance on a decision per row: score, confidence, rank, criteria and stance (JSONB). |
+| `assumptions`       | What a scenario takes to be true: kind, statement, assumed and recorded confidence.     |
+| `outcomes`          | What follows from the assumptions: result, impact (−1..1), likelihood.                  |
 
 All keys are UUIDv7, all timestamps `timestamptz`, and every foreign key is
 indexed. Organizations, users, and API keys support soft delete. Deleting an
@@ -136,6 +142,26 @@ explanation, source, timestamp), so nothing in the trail is anonymous. The
 dashboard's Evidence page renders the graph. Details are in
 `apps/api/README.md`.
 
+## Scenario Simulator
+
+```
+POST /v2/scenarios ─► decision's evidence (upstream walk) ─► five stances ─► assumptions ─► outcomes
+                                                                  └─► five criteria ─► weighted score · confidence · rank
+```
+
+Scenario planning, not forecasting. Each scenario (best case, base case, worst
+case, aggressive, conservative) applies an explicit stance to the same
+evidence, constraints, and stated assumptions: how optimistic to be about the
+evidence, how likely contradictions are to materialize, how much evidence to
+set aside, how fully to commit, and how reliably constraints hold. Every
+assumption is stored with its recorded and assumed confidence, its source, and
+the evidence node it rests on, and every outcome links to the assumption that
+drives it. Scores combine evidence quality, uncertainty, constraint
+satisfaction, objective alignment, and risk exposure; the per-criterion
+contributions add up to the score. The engine is deterministic and does not use
+Redis. The dashboard's Scenario Center compares a decision's scenarios. Details
+are in `apps/api/README.md`.
+
 ## Workspaces
 
 Two workspace managers share one repository:
@@ -153,8 +179,8 @@ Next.js `transpilePackages`, so there is no package build step.
 
 `packages/sdk-ts` (`@celestra/cortex-sdk`) and `packages/sdk-py`
 (`celestra-cortex`, sync and asyncio) expose the same surface: `chat`
-(complete and stream), `memory`, `knowledge`, `documents`, `router`, and
-`system`. Both clients work the same way:
+(complete and stream), `memory`, `knowledge`, `documents`, `evidence`,
+`scenarios`, `router`, and `system`. Both clients work the same way:
 
 - **Auth.** Bearer API keys (`ctx_...`, SHA-256 hashed server-side), with an
   optional `X-Organization-ID` that must match the key.

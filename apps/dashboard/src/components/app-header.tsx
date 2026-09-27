@@ -7,6 +7,7 @@ import type { Session } from "@/lib/session";
 const SECTIONS = [
   { href: "/executions", label: "Executions" },
   { href: "/evidence", label: "Evidence" },
+  { href: "/scenarios", label: "Scenarios" },
 ] as const;
 
 export function AppHeader({

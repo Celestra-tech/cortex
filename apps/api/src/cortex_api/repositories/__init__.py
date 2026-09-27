@@ -9,6 +9,7 @@ from cortex_api.repositories.memory_repository import (
     MessageRepository,
 )
 from cortex_api.repositories.organization import OrganizationRepository
+from cortex_api.repositories.scenario_repository import ScenarioRepository, SimulationSummary
 from cortex_api.repositories.user import UserRepository
 
 __all__ = [
@@ -23,5 +24,7 @@ __all__ = [
     "MessageRepository",
     "NotFoundError",
     "OrganizationRepository",
+    "ScenarioRepository",
+    "SimulationSummary",
     "UserRepository",
 ]

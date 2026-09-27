@@ -14,6 +14,7 @@ and asyncio (`AsyncCortex`) clients share the same API.
 - [Knowledge](#knowledge)
 - [Documents](#documents)
 - [Evidence](#evidence)
+- [Scenarios](#scenarios)
 - [Errors](#errors)
 - [Retries, timeouts, and request IDs](#retries-timeouts-and-request-ids)
 - [Middleware](#middleware)
@@ -293,6 +294,32 @@ cortex.evidence.record_decision(
 `list_decisions()` and `iter_decisions()` page through decisions, newest
 first. `record_decision` is not retried; a repeat `ref_id` raises
 `ConflictError`.
+
+## Scenarios
+
+Plan how to act on a decision. The simulator returns best case, base case,
+worst case, aggressive, and conservative scenarios, ranked, each with the
+stance it took, the assumptions it made, and the outcomes that follow:
+
+```python
+simulation = cortex.scenarios.simulate(
+    completion.id,
+    objective="Keep the customer without losing money",
+    constraints=[{"statement": "Refund stays under $500", "severity": "hard"}],
+    assumptions=[{"statement": "Finance approves the budget", "confidence": 0.8}],
+    risk_tolerance=0.4,  # 0 avoids harm, 1 chases the objective
+)
+best = simulation.recommended
+print(best.name, best.score, best.criteria["risk_exposure"].value)
+for assumption in best.assumptions:
+    print(assumption.kind, assumption.statement, assumption.evidence_node_id)
+
+history = cortex.scenarios.for_decision(completion.id)  # newest first
+scenario = cortex.scenarios.get(best.id)
+```
+
+`list()` and `iter()` page through every simulation. `simulate` is not
+retried, since each call records a new simulation.
 
 ## Errors
 

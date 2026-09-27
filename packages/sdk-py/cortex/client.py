@@ -16,6 +16,7 @@ from .knowledge import AsyncKnowledge, Knowledge
 from .memory import AsyncMemoryResource, MemoryResource
 from .middleware import AsyncMiddlewareFunction, Middleware, MiddlewareFunction
 from .router import AsyncRouter, Router
+from .scenarios import AsyncScenarios, Scenarios
 from .system import AsyncSystem, System
 
 SDK_VERSION = "1.0.0a0"
@@ -111,6 +112,7 @@ class Cortex(_BaseClient):
         self.knowledge = Knowledge(self._transport)
         self.documents = Documents(self._transport)
         self.evidence = Evidence(self._transport)
+        self.scenarios = Scenarios(self._transport)
         self.router = Router(self._transport)
         self.system = System(self._transport)
         self.api_keys = ApiKeys(self._transport)
@@ -184,6 +186,7 @@ class AsyncCortex(_BaseClient):
         self.knowledge = AsyncKnowledge(self._transport)
         self.documents = AsyncDocuments(self._transport)
         self.evidence = AsyncEvidence(self._transport)
+        self.scenarios = AsyncScenarios(self._transport)
         self.router = AsyncRouter(self._transport)
         self.system = AsyncSystem(self._transport)
         self.api_keys = AsyncApiKeys(self._transport)

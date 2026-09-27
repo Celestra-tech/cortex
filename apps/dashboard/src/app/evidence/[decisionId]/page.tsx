@@ -76,6 +76,9 @@ export default async function DecisionEvidencePage({
             <span className="font-mono text-xs" title="Decision id">
               {decision.ref_id}
             </span>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/scenarios/${encodeURIComponent(decisionId)}`}>Plan scenarios</Link>
+            </Button>
           </div>
           {counts.length > 0 ? (
             <ul className="mt-4 flex flex-wrap gap-2" aria-label="Evidence by type">

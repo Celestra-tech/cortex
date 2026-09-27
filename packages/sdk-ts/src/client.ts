@@ -8,6 +8,7 @@ import { Knowledge } from "./knowledge";
 import { MemoryResource } from "./memory";
 import { Observatory, System } from "./observatory";
 import { Router } from "./router";
+import { Scenarios } from "./scenarios";
 
 export const SDK_VERSION = "1.0.0-alpha";
 
@@ -45,6 +46,7 @@ export class Cortex {
   readonly knowledge: Knowledge;
   readonly documents: Documents;
   readonly evidence: Evidence;
+  readonly scenarios: Scenarios;
   readonly router: Router;
   readonly observatory: Observatory;
   readonly system: System;
@@ -85,6 +87,7 @@ export class Cortex {
     this.knowledge = new Knowledge(transport);
     this.documents = new Documents(transport);
     this.evidence = new Evidence(transport);
+    this.scenarios = new Scenarios(transport);
     this.router = new Router(transport);
     this.observatory = new Observatory(transport);
     this.system = new System(transport);

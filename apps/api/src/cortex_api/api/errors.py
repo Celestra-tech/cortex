@@ -21,6 +21,7 @@ from cortex_api.services.router.policies import NoRouteError, RoutingError
 from cortex_api.services.router.registry import RegistryError
 from cortex_api.services.router.router import CompletionFailedError
 from cortex_api.services.router.service import attempt_summaries
+from cortex_api.services.scenario.scoring import WeightError
 
 
 async def not_found_handler(_request: Request, exc: Exception) -> JSONResponse:
@@ -137,6 +138,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(EvidenceNotFoundError, evidence_not_found_handler)
     app.add_exception_handler(DecisionExistsError, conflict_handler)
     app.add_exception_handler(ProvenanceError, unprocessable_handler)
+    app.add_exception_handler(WeightError, unprocessable_handler)
     app.add_exception_handler(RegistryError, registry_error_handler)
     app.add_exception_handler(RoutingError, routing_error_handler)
     app.add_exception_handler(CompletionFailedError, completion_failed_handler)

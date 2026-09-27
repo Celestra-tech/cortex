@@ -196,6 +196,38 @@ curl -s -X POST localhost:8000/v2/evidence/decisions -H "Authorization: Bearer $
   }'
 ```
 
+### Scenarios (`/v2`)
+
+Plausible ways to act on a recorded decision, scored and ranked with every
+assumption stated. Scenarios are plans, not forecasts.
+
+| Method | Path                                  | Purpose                                                                             |
+| ------ | ------------------------------------- | ----------------------------------------------------------------------------------- |
+| POST   | `/v2/scenarios`                       | Simulate scenarios for a decision (`201`): all five ranked, best first.             |
+| GET    | `/v2/scenarios`                       | Simulations, newest first, with their recommended scenario: `limit` (≤ 100).        |
+| GET    | `/v2/scenarios/{id}`                  | One scenario with its criteria, stance, assumptions, and outcomes.                  |
+| GET    | `/v2/decisions/{decision_id}/scenarios` | A decision's simulations, newest first, with every scenario: `limit` (≤ 50, default 5). |
+
+`POST` takes `decision_id` (for completions, the completion id), `objective`
+(defaults to the decision title), up to 20 `constraints` (`statement`,
+`severity`: `hard` or `soft`), up to 20 stated `assumptions` (`statement`,
+`confidence`), `risk_tolerance` (0 favors avoiding harm, 1 favors reaching the
+objective; default 0.5), optional criterion `weights`, `types` (a subset of
+`best_case`, `base_case`, `worst_case`, `aggressive`, `conservative`), and
+evidence `depth`. `404` for an unknown decision, `422` for repeated types or
+all-zero weights.
+
+```bash
+curl -s -X POST localhost:8000/v2/scenarios -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{
+    "decision_id": "'$COMPLETION_ID'",
+    "objective": "Keep the customer without losing money",
+    "constraints": [{"statement": "Refund stays under $500", "severity": "hard"}],
+    "assumptions": [{"statement": "Finance approves the budget", "confidence": 0.8}],
+    "risk_tolerance": 0.4
+  }'
+```
+
 ## Evidence architecture
 
 The Evidence Graph is an explainability layer, not a knowledge graph. It
@@ -238,6 +270,63 @@ confidences and intermediate node confidences (max-product Dijkstra), and
 `strength` multiplies in the node's own confidence. A decision's confidence is
 a noisy-OR over its direct `supports` edges, discounted by each
 `contradicts` edge; with no support it is 0.
+
+## Scenario architecture
+
+The simulator is deterministic and transparent: no sampling, no model calls.
+Every scenario applies an explicit stance to the same inputs, the decision's
+Evidence Graph plus the request's constraints and stated assumptions, and
+records that stance next to its result.
+
+```
+POST /v2/scenarios
+  └─ ScenarioSimulator  (services/scenario/simulator.py)
+       ├─ evidence       upstream walk: supporting evidence (≤ 12, model runs excluded) + contradictions (≤ 5)
+       ├─ planner        per stance: assumptions (evidence · contradiction · constraint · stated · stance) → outcomes
+       ├─ evaluator      five criteria, each 0-1
+       ├─ scoring        weights (risk tolerance shifts alignment vs risk) → score, confidence, rank
+       └─ repository     scenarios · assumptions · outcomes (one transaction)
+```
+
+| Stance       | Evidence shift | Contradictions realized | Evidence floor | Commitment | Constraints kept (hard / soft) |
+| ------------ | -------------- | ----------------------- | -------------- | ---------- | ------------------------------ |
+| Best case    | +0.5           | × 0.5                   | —              | 80%        | 97% / 90%                      |
+| Base case    | 0              | × 1.0                   | —              | 60%        | 90% / 75%                      |
+| Worst case   | −0.5           | × 1.5                   | —              | 60%        | 80% / 50%                      |
+| Aggressive   | +0.1           | × 1.2                   | —              | 100%       | 75% / 45%                      |
+| Conservative | 0              | × 0.8                   | 0.5            | 35%        | 99% / 95%                      |
+
+A positive shift moves a confidence `c` toward 1 (`c + s(1 − c)`), a negative
+one toward 0 (`c(1 + s)`). Evidence assumptions start from each item's
+`strength` in the graph; the conservative stance ignores evidence weaker than
+its floor. Success likelihood is a noisy-OR over the evidence, times the chance
+each contradiction does not materialize, times every stated assumption.
+
+Outcomes follow from the assumptions: the objective is met (impact =
+commitment) or missed (−0.6 × commitment); each contradiction may materialize
+(−0.5 × commitment); each constraint may break (−1 hard, −0.4 soft) with
+likelihood 1 − adherence. Each outcome links to the assumption that drives it.
+
+| Criterion                 | Measure                                                          | Default weight |
+| ------------------------- | ---------------------------------------------------------------- | -------------- |
+| `evidence_quality`        | Noisy-OR of relied-on strengths, discounted below three kinds of evidence | 0.20   |
+| `uncertainty`             | Mean binary entropy of the scenario's non-stance assumptions (lower is better) | 0.15 |
+| `constraint_satisfaction` | Mean adherence, hard constraints weighted double                 | 0.20           |
+| `objective_alignment`     | Success likelihood × commitment                                  | 0.25           |
+| `risk_exposure`           | 1 − Π(1 − likelihood × \|impact\|) over harmful outcomes (lower is better) | 0.20  |
+
+Risk tolerance `t` multiplies the alignment weight by `0.5 + t` and the risk
+weight by `1.5 − t`; weights are then normalized. The score is the weighted sum
+of each criterion's desirability (its value, inverted for uncertainty and
+risk), so the returned `contribution`s add up to the score. Confidence is
+`(1 − uncertainty) × (0.5 + 0.5 × evidence_quality)`. Ties rank by confidence,
+then stance order.
+
+Scenarios reference their decision node (`ON DELETE CASCADE`), and assumptions
+reference the evidence node they rest on (`ON DELETE SET NULL`, so the
+statement survives). One `simulation_id` groups a run; `(simulation_id, type)`
+and `(simulation_id, rank)` are unique. The simulator does not use Redis:
+simulations are cheap to compute and read by id.
 
 ## Knowledge architecture
 
@@ -418,12 +507,15 @@ src/cortex_api/
   database/       config.py · base.py (Base) · mixins.py (id, timestamps, soft delete) · session.py · ids.py (UUIDv7) · types.py
   models/         organization · user · api_key · audit_log · conversation · message · memory · model_execution
                   document · document_chunk · embedding · knowledge_query
+                  evidence_node · evidence_edge · scenario · assumption · outcome
   repositories/   base.py (generic async CRUD) · memory_repository.py · execution_repository.py
-                  knowledge_repository.py · …
+                  knowledge_repository.py · evidence_repository.py · scenario_repository.py · …
   services/memory encoder (tokens, summaries) · session (Redis) · retrieval (FTS ranking) · service
   services/router base (contracts) · registry · policies · fallback · router · service · providers/
   services/knowledge  extraction · chunker · embeddings · ingestion · hybrid_search · citations
                       assembler · service
+  services/evidence   provenance · linker · traversal · graph
+  services/scenario   assumptions · planner · evaluator · scoring · simulator
   schemas/        request/response models (organization.py, user.py, api_key.py, memory.py, …)
   api/            deps.py (settings, tenant, services) · errors.py · v1.py · routes/
   core/           settings, logging, health probes

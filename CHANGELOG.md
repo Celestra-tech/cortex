@@ -42,6 +42,13 @@ milestone and the alpha of the Production Runtime.
   source, and timestamp. `/v2/evidence` serves ranked supporting evidence,
   contradictions, bounded graphs with a provenance timeline, node detail, and
   shortest paths, with matching `evidence` resources in both SDKs.
+- **Scenario Simulator.** Scenario planning for recorded decisions through
+  `/v2/scenarios` and `/v2/decisions/{id}/scenarios`. Five deterministic
+  stances (best case, base case, worst case, aggressive, conservative) turn a
+  decision's evidence, constraints, and stated assumptions into linked
+  assumptions and outcomes, scored on evidence quality, uncertainty, constraint
+  satisfaction, objective alignment, and risk exposure with adjustable weights
+  and risk tolerance. Matching `scenarios` resources in both SDKs.
 - **Observatory.** Usage, latency, provider mix, and cost overview; a live event
   stream over WebSocket; Prometheus metrics; OpenTelemetry traces; structured
   JSON logs.
@@ -54,7 +61,9 @@ milestone and the alpha of the Production Runtime.
   backoff, request IDs, streaming, pagination helpers, and middleware.
 - **Dashboard.** Operator console with API key sign-in, system health, the
   execution log, and an interactive Evidence Graph with a node and edge
-  inspector, confidence shading, and a provenance timeline.
+  inspector, confidence shading, and a provenance timeline. The Scenario
+  Center runs simulations and compares scenarios with cards, a criteria
+  table, an assumptions panel, and impact and confidence charts.
 - **Operations.** Non-root production images, Docker Compose for local
   development, Cloud Run and Vercel deployment for staging and production,
   monitoring and alert policies, and CI, deploy, and release workflows.
