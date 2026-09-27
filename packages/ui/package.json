@@ -1,0 +1,39 @@
+{
+  "name": "@celestra/cortex-ui",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "CELESTRA Cortex design system — shadcn/ui primitives and monochrome tokens.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    "./globals.css": "./src/styles/globals.css",
+    "./lib/*": "./src/lib/*.ts",
+    "./components/*": "./src/components/*.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.7.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@celestra/cortex-tsconfig": "workspace:*",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}

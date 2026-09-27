@@ -1,0 +1,20 @@
+{
+  "name": "@celestra/cortex-types",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "Shared TypeScript contracts for CELESTRA Cortex.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo"
+  },
+  "devDependencies": {
+    "@celestra/cortex-tsconfig": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}

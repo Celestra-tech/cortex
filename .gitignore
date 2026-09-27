@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Turborepo
+.turbo/
+
+# Testing
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Deployment
+.vercel/

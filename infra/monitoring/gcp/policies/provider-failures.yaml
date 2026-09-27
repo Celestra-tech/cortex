@@ -1,0 +1,28 @@
+displayName: "Cortex API ${ENVIRONMENT}: model provider failing"
+combiner: OR
+severity: WARNING
+conditions:
+  - displayName: A provider fails more than 25% of calls
+    conditionPrometheusQueryLanguage:
+      query: |
+        (
+          sum by (provider) (rate(cortex_provider_requests_total{environment="${ENVIRONMENT}", outcome!~"success|skipped"}[10m]))
+            / clamp_min(sum by (provider) (rate(cortex_provider_requests_total{environment="${ENVIRONMENT}"}[10m])), 1e-9)
+        ) > 0.25
+        and sum by (provider) (rate(cortex_provider_requests_total{environment="${ENVIRONMENT}"}[10m])) > 0.02
+      duration: 600s
+      evaluationInterval: 60s
+  - displayName: Every provider circuit is open
+    conditionPrometheusQueryLanguage:
+      query: |
+        count(min by (provider) (cortex_provider_circuit_open{environment="${ENVIRONMENT}"}) == 1)
+          == count(min by (provider) (cortex_provider_circuit_open{environment="${ENVIRONMENT}"}))
+      duration: 120s
+      evaluationInterval: 60s
+documentation:
+  mimeType: text/markdown
+  content: |
+    Completions are failing over or failing outright. `GET /health/providers` shows each
+    provider's circuit state; check the provider's status page and API key quota.
+alertStrategy:
+  autoClose: 1800s

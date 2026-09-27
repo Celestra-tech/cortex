@@ -1,0 +1,11 @@
+node_modules
+pnpm-lock.yaml
+uv.lock
+.next
+.turbo
+coverage
+.venv
+apps/api
+services
+apps/web
+apps/www

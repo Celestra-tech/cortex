@@ -1,0 +1,44 @@
+{
+  "name": "@celestra/cortex-dashboard",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "CELESTRA Cortex operator dashboard.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf .next .turbo coverage"
+  },
+  "dependencies": {
+    "@celestra/cortex-sdk": "workspace:*",
+    "@celestra/cortex-types": "workspace:*",
+    "@celestra/cortex-ui": "workspace:*",
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@celestra/cortex-tsconfig": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.10.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

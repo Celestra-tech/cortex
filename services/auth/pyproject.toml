@@ -1,0 +1,15 @@
+[project]
+name = "cortex-auth"
+version = "1.0.0a0"
+description = "CELESTRA Cortex Auth — identity, tenancy, API keys, and access control."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "Apache-2.0"
+dependencies = []
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cortex_auth"]

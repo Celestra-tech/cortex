@@ -1,0 +1,173 @@
+name: API
+
+# Staging: every commit on main that passes CI is built, migrated, deployed, and
+# smoke tested. Production: called by release.yml with the release tag (the image is
+# the one staging already runs, looked up by commit), or dispatched by hand.
+# Automatic staging deploys stay off until the repository variable
+# CORTEX_DEPLOY_ENABLED is "true" (infra/github/configure-repo.sh sets it).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        type: choice
+        options: [staging, production]
+        default: staging
+      ref:
+        description: Commit, branch, or tag to deploy (default main)
+        type: string
+        default: main
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      ref:
+        type: string
+        required: true
+      release:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-api-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+  REF: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  build:
+    name: build image
+    if: github.event_name != 'workflow_run' || (vars.CORTEX_DEPLOY_ENABLED == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      image: ${{ steps.final.outputs.image }}
+      revision: ${{ steps.image.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Resolve image
+        id: image
+        env:
+          REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_REGISTRY_PROJECT }}/cortex
+        run: |
+          revision="$(git rev-parse HEAD)"
+          repo="${REGISTRY}/cortex-api"
+          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+          echo "revision=${revision}" >>"$GITHUB_OUTPUT"
+          echo "repo=${repo}" >>"$GITHUB_OUTPUT"
+          echo "tag=${repo}:${revision}" >>"$GITHUB_OUTPUT"
+          if digest="$(gcloud artifacts docker images describe "${repo}:${revision}" --format 'value(image_summary.digest)' 2>/dev/null)" && [ -n "$digest" ]; then
+            echo "exists=true" >>"$GITHUB_OUTPUT"
+            echo "image=${repo}@${digest}" >>"$GITHUB_OUTPUT"
+            echo "Reusing ${repo}:${revision} (${digest})"
+          else
+            echo "exists=false" >>"$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-buildx-action@v3
+        if: steps.image.outputs.exists == 'false'
+      - name: Build and push
+        id: push
+        if: steps.image.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.tag }}
+          build-args: |
+            VERSION=${{ inputs.release || '1.0.0-alpha' }}
+            REVISION=${{ steps.image.outputs.revision }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+          provenance: true
+      - name: Pin the digest
+        id: final
+        env:
+          EXISTING: ${{ steps.image.outputs.image }}
+          PUSHED: ${{ steps.push.outputs.digest && format('{0}@{1}', steps.image.outputs.repo, steps.push.outputs.digest) || '' }}
+        run: |
+          image="${EXISTING:-$PUSHED}"
+          [ -n "$image" ] || { echo "no image digest" >&2; exit 1; }
+          echo "image=${image}" >>"$GITHUB_OUTPUT"
+          echo "Deploying ${image}" >>"$GITHUB_STEP_SUMMARY"
+      - name: Tag the release
+        if: inputs.release
+        run: gcloud artifacts docker tags add "${{ steps.final.outputs.image }}" "${{ steps.image.outputs.repo }}:${{ inputs.release }}" --quiet
+
+  deploy:
+    name: deploy ${{ inputs.environment || 'staging' }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.environment || 'staging' }}
+      url: ${{ steps.urls.outputs.api }}
+    env:
+      CORTEX_ENV: ${{ inputs.environment || 'staging' }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_REGISTRY_PROJECT: ${{ vars.GCP_REGISTRY_PROJECT }}
+      IMAGE: ${{ needs.build.outputs.image }}
+      REVISION: ${{ needs.build.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.REF }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: beta
+      - name: URLs
+        id: urls
+        run: |
+          if [ "$CORTEX_ENV" = production ]; then
+            echo "api=https://api.cortex.celestra.ai" >>"$GITHUB_OUTPUT"
+            echo "dashboard=https://cortex.celestra.ai" >>"$GITHUB_OUTPUT"
+          else
+            echo "api=https://api.staging.cortex.celestra.ai" >>"$GITHUB_OUTPUT"
+            echo "dashboard=https://staging.cortex.celestra.ai" >>"$GITHUB_OUTPUT"
+          fi
+      - name: Release name
+        run: |
+          release="${{ inputs.release }}"
+          echo "RELEASE=${release:-main-${REVISION:0:12}}" >>"$GITHUB_ENV"
+      - name: Migrate
+        run: infra/scripts/migrate.sh
+      - name: Deploy
+        run: infra/scripts/deploy-api.sh
+      - name: Smoke test
+        env:
+          CORTEX_API_URL: ${{ steps.urls.outputs.api }}
+          SMOKE_SKIP_COMPLETION: ${{ vars.SMOKE_SKIP_COMPLETION || 'false' }}
+        run: |
+          if [ "$CORTEX_ENV" = production ]; then
+            # Production gets read-only checks; staging exercises every success criterion.
+            infra/scripts/smoke-test.sh --health-only
+          else
+            CORTEX_ADMIN_TOKEN="$(gcloud secrets versions access latest --secret "cortex-${CORTEX_ENV}-admin-token" --project "$GCP_PROJECT_ID")"
+            echo "::add-mask::${CORTEX_ADMIN_TOKEN}"
+            export CORTEX_ADMIN_TOKEN
+            infra/scripts/smoke-test.sh
+          fi

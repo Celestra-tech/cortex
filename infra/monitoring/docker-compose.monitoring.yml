@@ -1,0 +1,68 @@
+# Local observability stack. Layer it over the main compose file from the repo root:
+#
+#   docker compose -f docker-compose.yml -f infra/monitoring/docker-compose.monitoring.yml up --build
+#
+# Prometheus http://localhost:9090 · Grafana http://localhost:3001 · Jaeger http://localhost:16686
+name: celestra-cortex
+
+services:
+  api:
+    environment:
+      CORTEX_METRICS_PORT: "9464"
+      CORTEX_OTEL_ENABLED: "true"
+      CORTEX_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./infra/monitoring/otel-collector.local.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+    networks: [cortex]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+    restart: unless-stopped
+    networks: [cortex]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks: [cortex]
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-cortex}
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks: [cortex]
+
+volumes:
+  prometheus-data:

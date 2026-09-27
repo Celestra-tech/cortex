@@ -1,0 +1,10 @@
+{
+  "name": "@celestra/cortex-tsconfig",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "Shared TypeScript configurations for CELESTRA Cortex.",
+  "license": "Apache-2.0",
+  "files": [
+    "*.json"
+  ]
+}

@@ -1,0 +1,60 @@
+# Sidecar collector for the Cloud Run API service (infra/cloudrun/service.yaml).
+# Stored in Secret Manager as cortex-<env>-otel-collector-config and mounted at
+# /etc/otelcol/config.yaml. Credentials come from the service's runtime account.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  # Spans from the API (CORTEX_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318).
+  otlp:
+    protocols:
+      http:
+        endpoint: localhost:4318
+  # The API's Prometheus endpoint (CORTEX_METRICS_PORT), never exposed publicly.
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: cortex-api
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["localhost:9464"]
+              labels:
+                # Alert policies in infra/monitoring/gcp/ select on this label.
+                environment: ${env:CORTEX_ENVIRONMENT}
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  resourcedetection:
+    detectors: [env, gcp]
+    timeout: 5s
+    override: false
+  # Every instance scrapes localhost:9464; the Cloud Run instance id keeps their
+  # series apart (otherwise Managed Prometheus rejects them as duplicates).
+  resource/instance:
+    attributes:
+      - key: service.instance.id
+        from_attribute: faas.instance
+        action: upsert
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  googlecloud: {}
+  googlemanagedprometheus: {}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [googlecloud]
+    metrics:
+      receivers: [prometheus]
+      processors: [memory_limiter, resourcedetection, resource/instance, batch]
+      exporters: [googlemanagedprometheus]

@@ -1,0 +1,14 @@
+{
+  "name": "@celestra/cortex-sdk-py",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "Turborepo task bridge for the Python SDK (managed by uv).",
+  "license": "Apache-2.0",
+  "scripts": {
+    "lint": "uv run ruff check . && uv run ruff format --check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "uv run mypy",
+    "test": "uv run pytest",
+    "clean": "rm -rf .pytest_cache .mypy_cache .ruff_cache"
+  }
+}

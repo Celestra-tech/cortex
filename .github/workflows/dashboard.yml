@@ -1,0 +1,96 @@
+name: Dashboard
+
+# Builds the dashboard with the Vercel CLI and deploys the prebuilt output to the
+# environment's Vercel project (infra/vercel/configure-project.sh). Staging follows
+# main after CI passes; production is called by release.yml.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        type: choice
+        options: [staging, production]
+        default: staging
+      ref:
+        description: Commit, branch, or tag to deploy (default main)
+        type: string
+        default: main
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      ref:
+        type: string
+        required: true
+    secrets:
+      VERCEL_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dashboard-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_CLI: vercel@44
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.environment || 'staging' }}
+    if: github.event_name != 'workflow_run' || (vars.CORTEX_DEPLOY_ENABLED == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: ${{ inputs.environment || 'staging' }}
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      CORTEX_ENV: ${{ inputs.environment || 'staging' }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Check configuration
+        run: |
+          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN; do
+            [ -n "${!name}" ] || { echo "::error::$name is not set for the $CORTEX_ENV environment (infra/github/configure-repo.sh)"; exit 1; }
+          done
+      - name: Pull project settings and environment
+        run: pnpm dlx "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
+      - name: Build
+        run: pnpm dlx "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
+      - name: Deploy
+        id: deploy
+        run: |
+          url="$(pnpm dlx "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          echo "url=${url}" >>"$GITHUB_OUTPUT"
+          echo "Deployed ${url}" >>"$GITHUB_STEP_SUMMARY"
+      - name: Verify
+        run: |
+          if [ "$CORTEX_ENV" = production ]; then site=https://cortex.celestra.ai; else site=https://staging.cortex.celestra.ai; fi
+          for attempt in $(seq 1 20); do
+            login="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$site/login" || true)"
+            redirect="$(curl -s -o /dev/null -w '%{redirect_url}' --max-time 10 "$site/executions" || true)"
+            if [ "$login" = 200 ] && [[ "$redirect" == */login\?next=* ]]; then
+              echo "$site serves sign-in and protects executions"
+              exit 0
+            fi
+            echo "attempt $attempt: /login=$login /executions -> ${redirect:-none}"
+            sleep 6
+          done
+          exit 1

@@ -1,0 +1,26 @@
+{
+  "name": "@celestra/cortex-sdk",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "TypeScript client for the CELESTRA Cortex API.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf .turbo"
+  },
+  "dependencies": {
+    "@celestra/cortex-types": "workspace:*",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@celestra/cortex-tsconfig": "workspace:*",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

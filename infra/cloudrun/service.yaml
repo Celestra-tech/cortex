@@ -1,0 +1,98 @@
+# Cortex API on Cloud Run: the API container plus an OpenTelemetry collector sidecar
+# that scrapes Prometheus metrics from localhost:9464 and forwards OTLP traces, exporting
+# both to Google Cloud (Managed Service for Prometheus, Cloud Trace).
+#
+# Rendered by infra/scripts/deploy-api.sh through infra/cloudrun/render.py:
+# dollar-brace variables come from the environment; the env line becomes the environment's
+# env file (infra/cloudrun/<env>.env.yaml) plus Secret Manager references.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${SERVICE_NAME}
+  labels:
+    app: cortex-api
+    environment: ${ENVIRONMENT}
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      labels:
+        app: cortex-api
+        environment: ${ENVIRONMENT}
+        release: ${RELEASE_LABEL}
+      annotations:
+        autoscaling.knative.dev/minScale: "${MIN_INSTANCES}"
+        autoscaling.knative.dev/maxScale: "${MAX_INSTANCES}"
+        # Instance-based billing keeps CPU for the metrics thread and span export
+        # between requests.
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cloudsql-instances: ${CLOUDSQL_CONNECTION}
+        # Direct VPC egress reaches Memorystore on its private IP.
+        run.googleapis.com/network-interfaces: '[{"network":"${VPC_NETWORK}","subnetwork":"${VPC_SUBNET}"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+        run.googleapis.com/container-dependencies: '{"api":["otel-collector"]}'
+    spec:
+      serviceAccountName: ${RUNTIME_SERVICE_ACCOUNT}
+      containerConcurrency: 80
+      # Streaming completions and SSE event feeds hold requests open.
+      timeoutSeconds: 900
+      containers:
+        - name: api
+          image: ${IMAGE}
+          ports:
+            - name: http1
+              containerPort: 8000
+          env:
+            # {{ENV}}
+          resources:
+            limits:
+              cpu: "${API_CPU}"
+              memory: ${API_MEMORY}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+        - name: otel-collector
+          image: ${COLLECTOR_IMAGE}
+          args:
+            - --config=/etc/otelcol/config.yaml
+          env:
+            - name: CORTEX_ENVIRONMENT
+              value: ${ENVIRONMENT}
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 2
+            timeoutSeconds: 2
+            failureThreshold: 30
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: otel-config
+          secret:
+            secretName: ${COLLECTOR_CONFIG_SECRET}
+            items:
+              - key: latest
+                path: config.yaml
+  traffic:
+    - latestRevision: true
+      percent: 100

@@ -1,0 +1,5 @@
+packages:
+  - "apps/api"
+  - "apps/dashboard"
+  - "packages/*"
+  - "examples/*"

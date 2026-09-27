@@ -1,0 +1,29 @@
+displayName: "Cortex API ${ENVIRONMENT}: uptime check failing"
+combiner: OR
+severity: CRITICAL
+conditions:
+  - displayName: /health/database unreachable from two or more regions
+    conditionThreshold:
+      filter: >-
+        metric.type="monitoring.googleapis.com/uptime_check/check_passed"
+        AND resource.type="uptime_url"
+        AND metric.label.check_id="${UPTIME_CHECK_ID}"
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_NEXT_OLDER
+          crossSeriesReducer: REDUCE_COUNT_FALSE
+          groupByFields:
+            - resource.label.project_id
+            - resource.label.host
+      comparison: COMPARISON_GT
+      thresholdValue: 1
+      duration: 120s
+      trigger:
+        count: 1
+documentation:
+  mimeType: text/markdown
+  content: |
+    `https://${API_HOST}/health/database` is failing from multiple checker regions: the API
+    is down or cannot reach PostgreSQL. Check Cloud Run revisions and Cloud SQL status.
+alertStrategy:
+  autoClose: 1800s

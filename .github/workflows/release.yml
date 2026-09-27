@@ -1,0 +1,139 @@
+name: Release
+
+# Cut a release from main: run CI, compute the version, tag it, deploy the tagged
+# commit to production (API, then dashboard), and publish the GitHub Release with
+# generated notes. Deploys run only when the repository variable CORTEX_DEPLOY_ENABLED
+# is "true"; otherwise the release is tagged and published without them.
+#
+# The first release is CELESTRA Cortex v1.0.0-alpha (from package.json). Afterwards the
+# version is bumped from Conventional Commits unless one is given, e.g. 1.0.0-alpha.2.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the leading v (blank = package.json for the first release, then bump from commits)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  prepare:
+    name: prepare
+    needs: ci
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Releases come from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run the release workflow on main (got ${GITHUB_REF})"
+          exit 1
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+      - name: Version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          cliff() { uvx --from 'git-cliff>=2.8,<3' git-cliff "$@"; }
+          if [ -n "$REQUESTED" ]; then
+            version="${REQUESTED#v}"
+          elif [ -z "$(git tag --list 'v[0-9]*')" ]; then
+            version="$(jq -r .version package.json)"
+          else
+            version="$(cliff --bumped-version)"
+            version="${version#v}"
+          fi
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+          [[ "$version" =~ $semver ]] || { echo "::error::'$version' is not a semantic version"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "::error::v${version} already exists"
+            exit 1
+          fi
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          {
+            echo "version=${version}"
+            echo "tag=v${version}"
+            echo "prerelease=${prerelease}"
+          } >>"$GITHUB_OUTPUT"
+          echo "Releasing CELESTRA Cortex v${version} (prerelease: ${prerelease})" >>"$GITHUB_STEP_SUMMARY"
+      - name: Release notes
+        run: |
+          uvx --from 'git-cliff>=2.8,<3' git-cliff --unreleased --tag "${{ steps.version.outputs.tag }}" \
+            --strip header --output release-notes.md
+          cat release-notes.md >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+      - name: Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "CELESTRA Cortex ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+  api:
+    needs: prepare
+    if: vars.CORTEX_DEPLOY_ENABLED == 'true'
+    uses: ./.github/workflows/api.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: production
+      ref: ${{ needs.prepare.outputs.tag }}
+      release: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  dashboard:
+    needs: [prepare, api]
+    if: vars.CORTEX_DEPLOY_ENABLED == 'true'
+    uses: ./.github/workflows/dashboard.yml
+    with:
+      environment: production
+      ref: ${{ needs.prepare.outputs.tag }}
+    secrets: inherit
+
+  publish:
+    name: publish release
+    needs: [prepare, api, dashboard]
+    # Skipped deploys must not block publishing; failed or cancelled ones must.
+    if: >-
+      always() && needs.prepare.result == 'success' &&
+      !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          flags=(--repo "$GITHUB_REPOSITORY" --title "CELESTRA Cortex ${TAG}" --notes-file release-notes.md --verify-tag)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "$TAG" "${flags[@]}"

@@ -1,0 +1,95 @@
+name: Tests
+
+# Every test suite against real PostgreSQL (pgvector) and Redis, plus a migration
+# round trip. Called by ci.yml; can also be dispatched on its own for any ref.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  UV_FROZEN: "1"
+
+jobs:
+  suites:
+    name: suites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: cortex
+          POSTGRES_PASSWORD: cortex
+          POSTGRES_DB: celestra_cortex_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cortex -d celestra_cortex_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      CORTEX_TEST_DATABASE_URL: postgresql+asyncpg://cortex:cortex@localhost:5432/celestra_cortex_test
+      CORTEX_TEST_REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - run: uv python install
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --all-packages
+      - name: API, SDKs, dashboard
+        run: pnpm turbo run test
+
+  migrations:
+    name: migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: cortex
+          POSTGRES_PASSWORD: cortex
+          POSTGRES_DB: celestra_cortex
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cortex -d celestra_cortex"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      CORTEX_ENV: test
+      CORTEX_DATABASE_URL: postgresql+asyncpg://cortex:cortex@localhost:5432/celestra_cortex
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --package cortex-api
+      - name: Upgrade from an empty database
+        run: uv run alembic upgrade head
+      - name: Models match the migrations
+        run: uv run alembic check
+      - name: Every migration downgrades
+        run: uv run alembic downgrade base
+      - name: Upgrade again
+        run: uv run alembic upgrade head

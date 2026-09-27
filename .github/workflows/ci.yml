@@ -1,0 +1,109 @@
+name: CI
+
+# The gate for every pull request and every commit on main: static checks, the test
+# suites (tests.yml), production image builds, and infrastructure validation.
+# Staging deploys (api.yml, dashboard.yml) follow a green run on main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  TURBO_TELEMETRY_DISABLED: "1"
+  UV_FROZEN: "1"
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+          enable-cache: true
+      - run: uv python install
+      - run: pnpm install --frozen-lockfile
+      - run: uv sync --all-packages
+      - name: Lint, typecheck, build
+        run: pnpm turbo run lint typecheck build
+      - name: Python outside the packages (examples, infra)
+        run: |
+          uv run ruff check examples infra
+          uv run ruff format --check examples infra
+      - name: Formatting
+        run: pnpm format:check
+
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  docker:
+    name: docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, dashboard]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/${{ matrix.image }}/Dockerfile
+          load: true
+          tags: cortex-${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Image runs
+        run: |
+          if [ "${{ matrix.image }}" = api ]; then
+            # The image defaults to CORTEX_ENV=production, which refuses default credentials.
+            docker run --rm -e CORTEX_ENV=development cortex-api:ci \
+              python -c "import cortex_api, cortex_api.main; print(cortex_api.__version__)"
+            docker run --rm cortex-api:ci alembic -c /app/alembic.ini heads
+          else
+            docker run --rm cortex-dashboard:ci node -e "require('fs').accessSync('apps/dashboard/server.js')"
+          fi
+          docker image ls "cortex-${{ matrix.image }}:ci" --format 'size: {{.Size}}'
+
+  infra:
+    name: infra
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+      - name: shellcheck
+        run: uvx --from shellcheck-py shellcheck -x infra/scripts/*.sh infra/vercel/*.sh infra/github/*.sh docker/api/entrypoint.sh
+      - name: actionlint
+        run: uvx --from actionlint-py actionlint
+      - name: Cloud Run manifests and policies render
+        run: python3 infra/cloudrun/test_render.py
+      - name: Prometheus rules
+        run: docker run --rm -v "$PWD/infra/monitoring:/m:ro" --entrypoint promtool prom/prometheus:v2.55.1 check rules /m/alerts.yml
+      - name: Collector configs
+        run: |
+          for config in otel-collector.cloudrun.yaml otel-collector.local.yaml; do
+            docker run --rm -e CORTEX_ENVIRONMENT=ci -v "$PWD/infra/monitoring:/m:ro" \
+              otel/opentelemetry-collector-contrib:0.120.0 validate --config="/m/$config"
+          done

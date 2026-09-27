@@ -1,0 +1,7 @@
+{
+  "extends": "@celestra/cortex-tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}

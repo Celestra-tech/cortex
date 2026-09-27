@@ -1,0 +1,105 @@
+name: celestra-cortex
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *restart
+    # PostgreSQL 17 with pgvector, required by Cortex Knowledge.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cortex}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex}
+      POSTGRES_DB: ${POSTGRES_DB:-celestra_cortex}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C.UTF-8
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [cortex]
+
+  redis:
+    <<: *restart
+    image: redis:8-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [cortex]
+
+  api:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: celestra/cortex-api:1.0.0-alpha
+    environment:
+      CORTEX_ENV: ${CORTEX_ENV:-development}
+      CORTEX_LOG_LEVEL: ${CORTEX_LOG_LEVEL:-INFO}
+      CORTEX_API_CORS_ORIGINS: ${CORTEX_API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      CORTEX_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cortex}:${POSTGRES_PASSWORD:-cortex}@postgres:5432/${POSTGRES_DB:-celestra_cortex}
+      CORTEX_REDIS_URL: redis://redis:6379/0
+      # A single container can migrate on start; Cloud Run uses a separate migrate job.
+      CORTEX_RUN_MIGRATIONS: "true"
+      CORTEX_LOG_FORMAT: ${CORTEX_LOG_FORMAT:-console}
+      # Empty keys leave that provider unavailable; the router skips it.
+      CORTEX_OPENAI_API_KEY: ${CORTEX_OPENAI_API_KEY:-${OPENAI_API_KEY:-}}
+      CORTEX_ANTHROPIC_API_KEY: ${CORTEX_ANTHROPIC_API_KEY:-${ANTHROPIC_API_KEY:-}}
+      CORTEX_GEMINI_API_KEY: ${CORTEX_GEMINI_API_KEY:-${GEMINI_API_KEY:-}}
+      CORTEX_ROUTER_FALLBACK_ORDER: ${CORTEX_ROUTER_FALLBACK_ORDER:-openai,anthropic,gemini}
+      # Changing the embedding provider, model, or dimensions starts a new embedding
+      # space; documents must be re-ingested to be found by vector search.
+      CORTEX_KNOWLEDGE_EMBEDDING_PROVIDER: ${CORTEX_KNOWLEDGE_EMBEDDING_PROVIDER:-local}
+      CORTEX_KNOWLEDGE_EMBEDDING_MODEL: ${CORTEX_KNOWLEDGE_EMBEDDING_MODEL:-}
+      CORTEX_KNOWLEDGE_EMBEDDING_DIMENSIONS: ${CORTEX_KNOWLEDGE_EMBEDDING_DIMENSIONS:-1536}
+      CORTEX_KNOWLEDGE_EMBEDDING_BASE_URL: ${CORTEX_KNOWLEDGE_EMBEDDING_BASE_URL:-}
+    ports:
+      - "${CORTEX_API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [cortex]
+
+  dashboard:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: docker/dashboard/Dockerfile
+    image: celestra/cortex-dashboard:1.0.0-alpha
+    init: true
+    environment:
+      CORTEX_API_URL: http://api:8000
+      CORTEX_API_PUBLIC_URL: http://localhost:${CORTEX_API_PORT:-8000}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [cortex]
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  cortex:
+    name: celestra-cortex

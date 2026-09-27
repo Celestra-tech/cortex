@@ -1,0 +1,19 @@
+displayName: "Cortex API ${ENVIRONMENT}: p95 latency above 2s"
+combiner: OR
+severity: WARNING
+conditions:
+  - displayName: p95 of non-streaming routes over 10 minutes
+    conditionPrometheusQueryLanguage:
+      query: |
+        histogram_quantile(0.95,
+          sum by (le) (rate(cortex_http_request_duration_seconds_bucket{environment="${ENVIRONMENT}", route!~"/v1/chat/completions.*|/v1/events.*"}[5m]))
+        ) > 2
+      duration: 600s
+      evaluationInterval: 60s
+documentation:
+  mimeType: text/markdown
+  content: |
+    `${SERVICE_NAME}` p95 latency (excluding completions and event streams) is above 2s.
+    Compare the database pool, Cloud SQL CPU, and instance count against traffic.
+alertStrategy:
+  autoClose: 1800s

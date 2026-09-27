@@ -1,0 +1,12 @@
+{
+  "framework": "nextjs",
+  "rootDirectory": "apps/dashboard",
+  "nodeVersion": "22.x",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": null,
+  "serverlessFunctionRegion": "iad1",
+  "sourceFilesOutsideRootDirectory": true,
+  "publicSource": false,
+  "gitForkProtection": true
+}

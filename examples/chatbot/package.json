@@ -1,0 +1,20 @@
+{
+  "name": "@celestra/cortex-example-chatbot",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@celestra/cortex-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@celestra/cortex-tsconfig": "workspace:*",
+    "@types/node": "^22",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

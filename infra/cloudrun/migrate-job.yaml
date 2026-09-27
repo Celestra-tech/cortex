@@ -1,0 +1,36 @@
+# Alembic migrations as a Cloud Run job, executed before each API rollout
+# (infra/scripts/migrate.sh). Same image and settings as the service, so the
+# production configuration checks run here too.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  labels:
+    app: cortex-api
+    environment: ${ENVIRONMENT}
+    release: ${RELEASE_LABEL}
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: ${CLOUDSQL_CONNECTION}
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      parallelism: 1
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: ${RUNTIME_SERVICE_ACCOUNT}
+          # Alembic runs each migration in a transaction; a failure must be looked at, not retried.
+          maxRetries: 0
+          timeoutSeconds: 900
+          containers:
+            - image: ${IMAGE}
+              args:
+                - migrate
+              env:
+                # {{ENV}}
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 512Mi

@@ -1,0 +1,4 @@
+{
+  "extends": "@celestra/cortex-tsconfig/base.json",
+  "include": ["src", "tests"]
+}

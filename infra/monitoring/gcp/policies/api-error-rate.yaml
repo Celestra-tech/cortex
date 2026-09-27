@@ -1,0 +1,22 @@
+displayName: "Cortex API ${ENVIRONMENT}: 5xx error rate above 5%"
+combiner: OR
+severity: CRITICAL
+conditions:
+  - displayName: 5xx ratio over 5 minutes
+    conditionPrometheusQueryLanguage:
+      query: |
+        (
+          sum(rate(cortex_http_requests_total{environment="${ENVIRONMENT}", status=~"5.."}[5m]))
+            / clamp_min(sum(rate(cortex_http_requests_total{environment="${ENVIRONMENT}"}[5m])), 1e-9)
+        ) > 0.05
+        and sum(rate(cortex_http_requests_total{environment="${ENVIRONMENT}"}[5m])) > 0.1
+      duration: 300s
+      evaluationInterval: 60s
+documentation:
+  mimeType: text/markdown
+  content: |
+    More than 5% of `${SERVICE_NAME}` requests are failing with 5xx.
+    Check the `cortex_http_exceptions_total` breakdown and the service's error logs
+    (`severity>=ERROR`). Runbook: docs/deployment.md, "Incident response".
+alertStrategy:
+  autoClose: 1800s

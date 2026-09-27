@@ -1,0 +1,17 @@
+{
+  "name": "@celestra/cortex-api",
+  "version": "1.0.0-alpha",
+  "private": true,
+  "description": "Turborepo task bridge for the Python API (managed by uv).",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "uv run --package cortex-api uvicorn cortex_api.main:app --reload --host 0.0.0.0 --port 8000",
+    "lint": "uv run ruff check . && uv run ruff format --check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "uv run mypy",
+    "test": "uv run pytest",
+    "db:upgrade": "uv run alembic upgrade head",
+    "db:revision": "uv run alembic revision --autogenerate",
+    "clean": "rm -rf .pytest_cache .mypy_cache .ruff_cache"
+  }
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Celestra-tech/cortex/security/advisories/new
+    about: Report vulnerabilities privately. Never open a public issue for a security problem.
+  - name: Ask a question
+    url: https://github.com/Celestra-tech/cortex/discussions
+    about: Questions about using or deploying Cortex belong in Discussions.

@@ -1,0 +1,29 @@
+# Local collector (infra/monitoring/docker-compose.monitoring.yml): receives the API's
+# OTLP spans and forwards them to Jaeger at http://localhost:16686.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 2s
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]

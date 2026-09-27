@@ -1,0 +1,72 @@
+# Prometheus alerting rules for the Cortex API. Loaded by the local Prometheus; the same
+# PromQL backs the Cloud Monitoring policies in infra/monitoring/gcp/.
+groups:
+  - name: cortex-api
+    rules:
+      - alert: CortexApiHighErrorRate
+        expr: |
+          sum(rate(cortex_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(cortex_http_requests_total[5m])), 1e-9) > 0.05
+          and sum(rate(cortex_http_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: More than 5% of API requests are failing with 5xx
+          runbook: docs/deployment.md#incident-response
+
+      - alert: CortexApiSlowRequests
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(cortex_http_request_duration_seconds_bucket{route!~"/v1/chat/completions.*|/v1/events.*"}[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: p95 latency of non-completion API routes is above 2s
+
+      - alert: CortexProviderFailures
+        expr: |
+          sum by (provider) (rate(cortex_provider_requests_total{outcome!~"success|skipped"}[10m]))
+            / clamp_min(sum by (provider) (rate(cortex_provider_requests_total[10m])), 1e-9) > 0.25
+          and sum by (provider) (rate(cortex_provider_requests_total[10m])) > 0.02
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.provider }} is failing more than 25% of calls"
+
+      - alert: CortexProviderCircuitOpen
+        expr: max by (provider) (cortex_provider_circuit_open) == 1
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.provider }} circuit breaker has been open for 5 minutes"
+
+      - alert: CortexNoProviderAvailable
+        expr: |
+          count(min by (provider) (cortex_provider_circuit_open) == 1)
+            == count(min by (provider) (cortex_provider_circuit_open))
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Every provider circuit is open; completions are failing
+
+      - alert: CortexRateLimitingSpike
+        expr: sum(rate(cortex_rate_limited_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Sustained HTTP 429s; a tenant may need a higher rate_limit_per_minute
+
+      - alert: CortexApiDown
+        expr: absent(up{job="cortex-api"} == 1)
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: The Cortex API metrics endpoint is not being scraped
