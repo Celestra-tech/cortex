@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal, NotRequired, Required, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, with_config
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, with_config
 
 Role = Literal["system", "user", "assistant", "tool"]
 MemoryType = Literal["episodic", "semantic", "procedural", "preference"]
@@ -187,6 +187,54 @@ class DecisionParams(TypedDict, total=False):
     metadata: Metadata
     source: Annotated[str, Field(min_length=1, max_length=191)] | None
     evidence: Required[Annotated[list[EvidenceParams], Field(min_length=1, max_length=200)]]
+
+
+ScenarioType = Literal["best_case", "base_case", "worst_case", "aggressive", "conservative"]
+Statement = Annotated[str, Field(min_length=1, max_length=500)]
+Weight = Annotated[float, Field(ge=0)]
+
+
+def _unique[T](values: list[T]) -> list[T]:
+    if len(set(values)) != len(values):
+        raise ValueError("types must not repeat")
+    return values
+
+
+@with_config(_loose)
+class ConstraintParams(TypedDict, total=False):
+    statement: Required[Statement]
+    severity: Literal["hard", "soft"]
+    """`hard` must hold for the decision to stand; `soft` is costly but survivable. Default soft."""
+
+
+@with_config(_loose)
+class StatedAssumptionParams(TypedDict):
+    statement: Statement
+    confidence: Unit
+    """How likely the assumption holds today."""
+
+
+@with_config(_loose)
+class ScenarioWeightParams(TypedDict, total=False):
+    """Relative importance of each criterion; omitted ones keep their defaults."""
+
+    evidence_quality: Weight
+    uncertainty: Weight
+    constraint_satisfaction: Weight
+    objective_alignment: Weight
+    risk_exposure: Weight
+
+
+@with_config(_loose)
+class SimulationParams(TypedDict, total=False):
+    decision_id: Required[str]
+    objective: Annotated[str, Field(min_length=1, max_length=1000)] | None
+    constraints: Annotated[list[ConstraintParams], Field(max_length=20)]
+    assumptions: Annotated[list[StatedAssumptionParams], Field(max_length=20)]
+    risk_tolerance: Unit
+    weights: ScenarioWeightParams | None
+    types: Annotated[list[ScenarioType], Field(min_length=1), AfterValidator(_unique)] | None
+    depth: Annotated[int, Field(ge=1, le=10)]
 
 
 # --- Responses -----------------------------------------------------------------------------------
@@ -759,3 +807,121 @@ class EvidencePath(CortexModel):
     connected: bool
     edges: list[EvidenceEdge]
     nodes: list[EvidenceNode]
+
+
+# Scenarios
+
+
+class ScenarioAssumption(CortexModel):
+    id: str
+    kind: str
+    """evidence, contradiction, constraint, strategy, or stated."""
+    statement: str
+    confidence: float
+    """What the scenario assumes."""
+    baseline_confidence: float
+    """The same assumption as recorded."""
+    source: str
+    evidence_node_id: str | None
+    """The Evidence Graph node the assumption rests on."""
+
+
+class ScenarioOutcome(CortexModel):
+    id: str
+    kind: str
+    result: str
+    impact: float
+    """-1 (severe harm) to 1 (objective fully achieved)."""
+    likelihood: float
+    expected_impact: float
+    assumption_id: str | None
+
+
+class CriterionScore(CortexModel):
+    value: float
+    """The measurement, 0-1, in its natural sense (high uncertainty is high)."""
+    desirability: float
+    """0-1, higher is better."""
+    weight: float
+    contribution: float
+    """desirability x weight; these sum to the score."""
+
+
+class ScenarioEvidence(CortexModel):
+    relied: int
+    excluded: int
+    contradictions: int
+    truncated: bool
+
+
+class ScenarioStrategy(CortexModel):
+    optimism: float
+    contradiction_realization: float
+    evidence_floor: float
+    commitment: float
+    adherence_hard: float
+    adherence_soft: float
+
+
+class Scenario(CortexModel):
+    id: str
+    simulation_id: str
+    decision_id: str
+    type: str
+    name: str
+    description: str
+    objective: str
+    score: float
+    confidence: float
+    rank: int
+    """1 is the recommended scenario of its simulation."""
+    success_likelihood: float
+    expected_impact: float
+    criteria: dict[str, CriterionScore]
+    evidence: ScenarioEvidence
+    strategy: ScenarioStrategy
+    assumptions: list[ScenarioAssumption]
+    outcomes: list[ScenarioOutcome]
+    created_at: datetime
+
+
+class Simulation(CortexModel):
+    simulation_id: str
+    decision_id: str
+    objective: str
+    parameters: Metadata
+    recommended_id: str
+    scenarios: list[Scenario]
+    """Best first."""
+    created_at: datetime
+
+    @property
+    def recommended(self) -> Scenario:
+        return next(s for s in self.scenarios if s.id == self.recommended_id)
+
+
+class DecisionScenarios(CortexModel):
+    decision_id: str
+    simulations: list[Simulation]
+    """Newest first."""
+    total: int
+    limit: int
+    offset: int
+
+
+class RecommendedScenario(CortexModel):
+    id: str
+    type: str
+    name: str
+    score: float
+    confidence: float
+
+
+class SimulationSummary(CortexModel):
+    simulation_id: str
+    decision_id: str
+    decision_title: str
+    objective: str
+    scenario_count: int
+    recommended: RecommendedScenario
+    created_at: datetime

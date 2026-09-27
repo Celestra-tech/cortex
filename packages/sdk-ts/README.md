@@ -13,6 +13,7 @@ authentication, retries, streaming, and middleware built in.
 - [Knowledge](#knowledge)
 - [Documents](#documents)
 - [Evidence](#evidence)
+- [Scenarios](#scenarios)
 - [Errors](#errors)
 - [Retries, timeouts, and request IDs](#retries-timeouts-and-request-ids)
 - [Middleware](#middleware)
@@ -271,6 +272,32 @@ await cortex.evidence.recordDecision({
 
 `listDecisions()` and `iterDecisions()` page through decisions, newest first.
 `recordDecision` is not retried; a repeat `ref_id` throws `ConflictError`.
+
+## Scenarios
+
+Plan how to act on a decision. The simulator returns best case, base case,
+worst case, aggressive, and conservative scenarios, ranked, each with the
+stance it took, the assumptions it made, and the outcomes that follow:
+
+```ts
+const simulation = await cortex.scenarios.simulate({
+  decision_id: completion.id,
+  objective: "Keep the customer without losing money",
+  constraints: [{ statement: "Refund stays under $500", severity: "hard" }],
+  assumptions: [{ statement: "Finance approves the budget", confidence: 0.8 }],
+  risk_tolerance: 0.4, // 0 avoids harm, 1 chases the objective
+});
+const [best] = simulation.scenarios; // ranked, best first
+console.log(best!.name, best!.score, best!.criteria.risk_exposure.value);
+for (const a of best!.assumptions)
+  console.log(a.kind, a.statement, a.confidence, a.evidence_node_id);
+
+const history = await cortex.scenarios.forDecision(completion.id); // newest first
+const scenario = await cortex.scenarios.get(best!.id);
+```
+
+`list()` and `iter()` page through every simulation. `simulate` is not
+retried, since each call records a new simulation.
 
 ## Live events
 

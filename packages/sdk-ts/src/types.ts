@@ -30,6 +30,11 @@ import type {
   Message,
   MessageCreate,
   ModelListResponse,
+  DecisionScenariosResponse,
+  Scenario,
+  Simulation,
+  SimulationCreate,
+  SimulationListResponse,
 } from "@celestra/cortex-types";
 import { z } from "zod";
 
@@ -459,4 +464,137 @@ export const evidencePathSchema = response<EvidencePath>(
     edges: z.array(evidenceEdge),
     nodes: z.array(evidenceNode),
   }),
+);
+
+// --- Scenarios ------------------------------------------------------------------------------------
+
+const scenarioType = z.enum(["best_case", "base_case", "worst_case", "aggressive", "conservative"]);
+const statement = z.string().trim().min(1).max(500);
+const weight = z.number().min(0).optional();
+
+export const simulationCreateSchema = z.looseObject({
+  decision_id: id,
+  objective: z.string().trim().min(1).max(1000).nullable().optional(),
+  constraints: z
+    .array(z.looseObject({ statement, severity: z.enum(["hard", "soft"]).optional() }))
+    .max(20)
+    .optional(),
+  assumptions: z
+    .array(z.looseObject({ statement, confidence: unit }))
+    .max(20)
+    .optional(),
+  risk_tolerance: unit.optional(),
+  weights: z
+    .looseObject({
+      evidence_quality: weight,
+      uncertainty: weight,
+      constraint_satisfaction: weight,
+      objective_alignment: weight,
+      risk_exposure: weight,
+    })
+    .nullable()
+    .optional(),
+  types: z
+    .array(scenarioType)
+    .min(1)
+    .refine((types) => new Set(types).size === types.length, "types must not repeat")
+    .nullable()
+    .optional(),
+  depth: z.number().int().min(1).max(10).optional(),
+}) satisfies z.ZodType<SimulationCreate>;
+
+const criterionScore = z.looseObject({
+  value: z.number(),
+  desirability: z.number(),
+  weight: z.number(),
+  contribution: z.number(),
+});
+
+const scenario = z.looseObject({
+  id,
+  simulation_id: id,
+  decision_id: id,
+  type: z.string(),
+  name: z.string(),
+  description: z.string(),
+  objective: z.string(),
+  score: z.number(),
+  confidence: z.number(),
+  rank: z.number(),
+  success_likelihood: z.number(),
+  expected_impact: z.number(),
+  criteria: z.record(z.string(), criterionScore),
+  evidence: z.looseObject({
+    relied: z.number(),
+    excluded: z.number(),
+    contradictions: z.number(),
+    truncated: z.boolean(),
+  }),
+  strategy: z.record(z.string(), z.number()),
+  assumptions: z.array(
+    z.looseObject({
+      id,
+      kind: z.string(),
+      statement: z.string(),
+      confidence: z.number(),
+      baseline_confidence: z.number(),
+      source: z.string(),
+      evidence_node_id: id.nullable(),
+    }),
+  ),
+  outcomes: z.array(
+    z.looseObject({
+      id,
+      kind: z.string(),
+      result: z.string(),
+      impact: z.number(),
+      likelihood: z.number(),
+      expected_impact: z.number(),
+      assumption_id: id.nullable(),
+    }),
+  ),
+  created_at: timestamp,
+});
+
+const simulation = z.looseObject({
+  simulation_id: id,
+  decision_id: id,
+  objective: z.string(),
+  parameters: metadata,
+  recommended_id: id,
+  scenarios: z.array(scenario),
+  created_at: timestamp,
+});
+
+export const scenarioSchema = response<Scenario>(scenario);
+export const simulationSchema = response<Simulation>(simulation);
+
+export const decisionScenariosSchema = response<DecisionScenariosResponse>(
+  z.looseObject({
+    decision_id: id,
+    simulations: z.array(simulation),
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  }),
+);
+
+export const simulationListSchema = response<SimulationListResponse>(
+  page(
+    z.looseObject({
+      simulation_id: id,
+      decision_id: id,
+      decision_title: z.string(),
+      objective: z.string(),
+      scenario_count: z.number(),
+      recommended: z.looseObject({
+        id,
+        type: z.string(),
+        name: z.string(),
+        score: z.number(),
+        confidence: z.number(),
+      }),
+      created_at: timestamp,
+    }),
+  ),
 );
