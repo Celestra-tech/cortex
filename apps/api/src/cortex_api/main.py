@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from cortex_api import SERVICE_NAME, __version__
-from cortex_api.api import v1
+from cortex_api.api import v1, v2
 from cortex_api.api.errors import register_exception_handlers
 from cortex_api.api.routes import health
 from cortex_api.cache.redis import create_redis
@@ -160,6 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(v1.router)
+    app.include_router(v2.router)
     instrument_app(app, app.state.tracer_provider)
     return app
 

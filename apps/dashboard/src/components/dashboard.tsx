@@ -30,6 +30,7 @@ export function Dashboard({ status, apiDocsUrl }: { status: SystemStatus; apiDoc
         <span className="text-[13px] font-semibold tracking-[0.2em]">CELESTRA</span>
         <nav className="flex items-center gap-6 text-sm">
           <Link href="/executions">Executions</Link>
+          <Link href="/evidence">Evidence</Link>
           <span className="text-muted-foreground font-mono text-xs">v{DASHBOARD_VERSION}</span>
         </nav>
       </header>

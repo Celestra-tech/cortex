@@ -33,6 +33,15 @@ milestone and the alpha of the Production Runtime.
   pgvector and full-text retrieval fused with reciprocal rank fusion; numbered
   citations, confidence scoring, a retrieval log, and knowledge grounding in
   completions.
+- **Evidence Graph.** Every decision is traceable. Completions are recorded
+  as decisions linked to the memories, messages, conversations, documents,
+  chunks, retrievals, and model runs that produced them; external decisions
+  can be recorded through `POST /v2/evidence/decisions`. Typed edges
+  (`supports`, `references`, `derived_from`, `retrieved_from`,
+  `generated_by`, `contradicts`) carry provenance: confidence, explanation,
+  source, and timestamp. `/v2/evidence` serves ranked supporting evidence,
+  contradictions, bounded graphs with a provenance timeline, node detail, and
+  shortest paths, with matching `evidence` resources in both SDKs.
 - **Observatory.** Usage, latency, provider mix, and cost overview; a live event
   stream over WebSocket; Prometheus metrics; OpenTelemetry traces; structured
   JSON logs.
@@ -43,8 +52,9 @@ milestone and the alpha of the Production Runtime.
 - **SDKs.** `@celestra/cortex-sdk` for TypeScript and `celestra-cortex` for
   Python (sync and asyncio) with the same surface, typed errors, retries with
   backoff, request IDs, streaming, pagination helpers, and middleware.
-- **Dashboard.** Operator console with API key sign-in, system health, and the
-  execution log.
+- **Dashboard.** Operator console with API key sign-in, system health, the
+  execution log, and an interactive Evidence Graph with a node and edge
+  inspector, confidence shading, and a provenance timeline.
 - **Operations.** Non-root production images, Docker Compose for local
   development, Cloud Run and Vercel deployment for staging and production,
   monitoring and alert policies, and CI, deploy, and release workflows.

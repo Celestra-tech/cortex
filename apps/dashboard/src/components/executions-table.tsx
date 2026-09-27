@@ -1,5 +1,6 @@
 import type { ExecutionListResponse, ModelExecution, RequestStats } from "@celestra/cortex-sdk";
 import { Badge } from "@celestra/cortex-ui/components/badge";
+import Link from "next/link";
 
 export interface ExecutionFilters {
   provider?: string;
@@ -140,7 +141,17 @@ export function ExecutionsTable({ page }: { page: ExecutionListResponse }) {
                 className="text-muted-foreground px-4 py-3 font-mono text-xs"
                 title={execution.completion_id}
               >
-                {execution.completion_id.slice(-12)}
+                {execution.success ? (
+                  <Link
+                    href={`/evidence/${execution.completion_id}`}
+                    className="hover:text-foreground underline-offset-4 hover:underline"
+                    aria-label={`Evidence for completion ${execution.completion_id}`}
+                  >
+                    {execution.completion_id.slice(-12)}
+                  </Link>
+                ) : (
+                  execution.completion_id.slice(-12)
+                )}
               </td>
             </tr>
           ))}

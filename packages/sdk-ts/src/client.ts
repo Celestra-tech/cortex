@@ -2,6 +2,7 @@ import { ApiKeys } from "./api-keys";
 import { type AuthOptions, Credentials, DEFAULT_BASE_URL, env } from "./auth";
 import { Chat } from "./chat";
 import { Documents } from "./documents";
+import { Evidence } from "./evidence";
 import { type Middleware, type RetryOptions, Transport } from "./http";
 import { Knowledge } from "./knowledge";
 import { MemoryResource } from "./memory";
@@ -43,6 +44,7 @@ export class Cortex {
   readonly memory: MemoryResource;
   readonly knowledge: Knowledge;
   readonly documents: Documents;
+  readonly evidence: Evidence;
   readonly router: Router;
   readonly observatory: Observatory;
   readonly system: System;
@@ -82,6 +84,7 @@ export class Cortex {
     this.memory = new MemoryResource(transport);
     this.knowledge = new Knowledge(transport);
     this.documents = new Documents(transport);
+    this.evidence = new Evidence(transport);
     this.router = new Router(transport);
     this.observatory = new Observatory(transport);
     this.system = new System(transport);

@@ -6,6 +6,8 @@ from cortex_api.models.conversation import Conversation
 from cortex_api.models.document import Document
 from cortex_api.models.document_chunk import EMBEDDING_DIMENSIONS, DocumentChunk
 from cortex_api.models.embedding import Embedding
+from cortex_api.models.evidence_edge import EvidenceEdge, EvidenceEdgeType
+from cortex_api.models.evidence_node import EvidenceNode, EvidenceNodeType
 from cortex_api.models.knowledge_query import KnowledgeQuery, SearchMode
 from cortex_api.models.memory import Memory, MemoryType
 from cortex_api.models.message import Message, MessageRole
@@ -21,6 +23,10 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "Embedding",
+    "EvidenceEdge",
+    "EvidenceEdgeType",
+    "EvidenceNode",
+    "EvidenceNodeType",
     "KnowledgeQuery",
     "Memory",
     "MemoryType",

@@ -10,6 +10,9 @@ from cortex_api.core.security import (
 from cortex_api.repositories.base import NotFoundError
 from cortex_api.schemas.completion import CompletionErrorResponse
 from cortex_api.services.api_keys import LastAdminKeyError
+from cortex_api.services.evidence.graph import EvidenceNotFoundError
+from cortex_api.services.evidence.linker import DecisionExistsError
+from cortex_api.services.evidence.provenance import ProvenanceError
 from cortex_api.services.knowledge.extraction import ExtractionError, UnsupportedFormatError
 from cortex_api.services.knowledge.hybrid_search import VectorSearchUnavailableError
 from cortex_api.services.knowledge.ingestion import DuplicateDocumentError, IngestionError
@@ -25,6 +28,19 @@ async def not_found_handler(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"detail": f"{resource} not found"},
+    )
+
+
+async def evidence_not_found_handler(_request: Request, exc: Exception) -> JSONResponse:
+    kind = exc.kind if isinstance(exc, EvidenceNotFoundError) else "Resource"
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND, content={"detail": f"{kind} not found"}
+    )
+
+
+async def unprocessable_handler(_request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content={"detail": str(exc)}
     )
 
 
@@ -118,6 +134,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RateLimitExceededError, rate_limit_handler)
     app.add_exception_handler(LastAdminKeyError, conflict_handler)
     app.add_exception_handler(NotFoundError, not_found_handler)
+    app.add_exception_handler(EvidenceNotFoundError, evidence_not_found_handler)
+    app.add_exception_handler(DecisionExistsError, conflict_handler)
+    app.add_exception_handler(ProvenanceError, unprocessable_handler)
     app.add_exception_handler(RegistryError, registry_error_handler)
     app.add_exception_handler(RoutingError, routing_error_handler)
     app.add_exception_handler(CompletionFailedError, completion_failed_handler)

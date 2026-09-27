@@ -45,7 +45,8 @@ organizations ─┬─< users ──────────┐
                ├─< memories >─ source_message_id (SET NULL) ─┘
                ├─< model_executions   (grouped by completion_id)
                ├─< documents ─< document_chunks ─< embeddings
-               └─< knowledge_queries  (completion_id links grounded completions)
+               ├─< knowledge_queries  (completion_id links grounded completions)
+               └─< evidence_nodes ─< evidence_edges >─ evidence_nodes
 ```
 
 | Table               | Notes                                                                                   |
@@ -62,6 +63,8 @@ organizations ─┬─< users ──────────┐
 | `document_chunks`   | Chunk text, offsets, section, pages, `vector(1536)` (HNSW) and weighted tsvector (GIN). |
 | `embeddings`        | Each chunk's native-width vector per provider/model/dimensions.                         |
 | `knowledge_queries` | Retrieval log: latency split, candidates, confidence, results, citations used.          |
+| `evidence_nodes`    | Snapshots of decisions and their evidence; `ref_id` names the source record, no FK.     |
+| `evidence_edges`    | Typed links with provenance: confidence, explanation, source, `observed_at`.            |
 
 All keys are UUIDv7, all timestamps `timestamptz`, and every foreign key is
 indexed. Organizations, users, and API keys support soft delete. Deleting an
@@ -117,6 +120,21 @@ space (`provider/model@dims`), so changing embedding models never compares
 incompatible vectors. Redis caches query embeddings only. Every search writes
 a `knowledge_queries` row, which feeds `GET /v1/knowledge/metrics`. Details
 are in `apps/api/README.md`.
+
+## Evidence Graph
+
+```
+POST /v1/chat/completions ─► execution log + decision node + evidence edges (one transaction)
+POST /v2/evidence/decisions ─► external decision + evidence
+GET  /v2/evidence/{id}[/graph] ─► recursive CTE (bounded) ─► in-memory traversal ─► ranked evidence · timeline
+```
+
+Every decision links to the exact memories, messages, conversations,
+documents, chunks, retrievals, and model runs that produced it. Edges point
+from evidence to what it informed and carry their provenance (confidence,
+explanation, source, timestamp), so nothing in the trail is anonymous. The
+dashboard's Evidence page renders the graph. Details are in
+`apps/api/README.md`.
 
 ## Workspaces
 

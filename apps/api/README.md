@@ -166,6 +166,79 @@ Status codes: `409` identical content already ingested (the body carries
 unsupported file type, `422` unreadable file (encrypted or scanned PDFs,
 corrupt DOCX), `502` embedding provider failed.
 
+### Evidence (`/v2`)
+
+Every decision is linked to the records that produced it. Completions are
+recorded automatically; a decision is addressed by the id of what was decided,
+so for completions `{decision_id}` is the completion id.
+
+| Method | Path                               | Purpose                                                                                |
+| ------ | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| GET    | `/v2/evidence`                     | Decisions, newest first: `limit` (≤ 200), `offset`.                                    |
+| POST   | `/v2/evidence/decisions`           | Record an external decision with its evidence (`201`; `409` if the `ref_id` exists).   |
+| GET    | `/v2/evidence/{decision_id}`       | The decision, supporting evidence strongest first, contradictions, counts by type.     |
+| GET    | `/v2/evidence/{decision_id}/graph` | Nodes with signed depth, edges with provenance, a timeline, and a `truncated` flag.    |
+| GET    | `/v2/evidence/node/{id}`           | One node by node id, its direct neighbors, and the decisions it fed.                   |
+| GET    | `/v2/evidence/path`                | Shortest chain between two nodes: `source`, `target`, `directed`, `depth`.             |
+
+Reads take `depth` (1-10, default 4).
+
+```bash
+curl -s localhost:8000/v2/evidence/$COMPLETION_ID -H "Authorization: Bearer $KEY"
+curl -s -X POST localhost:8000/v2/evidence/decisions -H "Authorization: Bearer $KEY" \
+  -H 'Content-Type: application/json' -d '{
+    "title": "Approve refund for order 1042",
+    "source": "policy-engine@3",
+    "evidence": [
+      {"type": "document", "ref_id": "'$DOC_ID'", "title": "Refund policy",
+       "explanation": "Order is inside the 30-day window", "relation_confidence": 0.9}
+    ]
+  }'
+```
+
+## Evidence architecture
+
+The Evidence Graph is an explainability layer, not a knowledge graph. It
+lives in two tables in PostgreSQL:
+
+- `evidence_nodes`: a snapshot of a decision, memory, message, conversation,
+  document, chunk, knowledge retrieval, or model run (`benchmark`), with a
+  title, a confidence, and `ref_id` pointing at the source record. Nodes have
+  no foreign key to their source, so the trail survives when the source is
+  deleted. `(organization_id, type, ref_id)` is unique, so the same memory or
+  chunk is one node shared by every decision it informed.
+- `evidence_edges`: `supports`, `references`, `derived_from`,
+  `retrieved_from`, `generated_by`, or `contradicts`. Edges always point
+  upstream to downstream, from the evidence to what it informed. `supports`
+  and `contradicts` read forward ("memory supports decision"); the rest read
+  from the downstream end ("chunk derived from document"). Every edge carries
+  provenance: `confidence`, `explanation`, `source` (a `cortex.*` component
+  or `api:key/<id>`), and `observed_at`.
+
+Writes are first-write-wins (`ON CONFLICT DO NOTHING`), so provenance is never
+rewritten. A completion's trail commits in the same transaction as its
+execution log:
+
+```
+completion ──generated_by── model run (winning execution)
+    ▲ supports    recalled memories (edge confidence = recall score)
+    ▲ references  conversation; history messages ──derived_from──►
+    ▲ supports    knowledge retrieval (references when grounding was off)
+    │               ▲ retrieved_from  chunks ◄──derived_from── documents
+    ▲ supports    cited chunks
+    └──generated_by──► stored assistant reply; stored prompts ──derived_from──► decision
+```
+
+Traversal loads a bounded subgraph with one recursive CTE (depth ≤ 10, at most
+2000 edges, `truncated` when cut short) and runs the algorithms in memory
+(`services/evidence/traversal.py`): `ancestors`, `descendants`,
+`shortest_path`, and `supporting_evidence`. Supporting evidence ranks every
+upstream node by its strongest route: `path_confidence` is the product of edge
+confidences and intermediate node confidences (max-product Dijkstra), and
+`strength` multiplies in the node's own confidence. A decision's confidence is
+a noisy-OR over its direct `supports` edges, discounted by each
+`contradicts` edge; with no support it is 0.
+
 ## Knowledge architecture
 
 ```

@@ -11,6 +11,7 @@ from .api_keys import ApiKeys, AsyncApiKeys
 from .auth import DEFAULT_BASE_URL, NOT_GIVEN, ApiKey, Credentials, NotGiven, env
 from .chat import AsyncChat, Chat
 from .documents import AsyncDocuments, Documents
+from .evidence import AsyncEvidence, Evidence
 from .knowledge import AsyncKnowledge, Knowledge
 from .memory import AsyncMemoryResource, MemoryResource
 from .middleware import AsyncMiddlewareFunction, Middleware, MiddlewareFunction
@@ -109,6 +110,7 @@ class Cortex(_BaseClient):
         self.memory = MemoryResource(self._transport)
         self.knowledge = Knowledge(self._transport)
         self.documents = Documents(self._transport)
+        self.evidence = Evidence(self._transport)
         self.router = Router(self._transport)
         self.system = System(self._transport)
         self.api_keys = ApiKeys(self._transport)
@@ -181,6 +183,7 @@ class AsyncCortex(_BaseClient):
         self.memory = AsyncMemoryResource(self._transport)
         self.knowledge = AsyncKnowledge(self._transport)
         self.documents = AsyncDocuments(self._transport)
+        self.evidence = AsyncEvidence(self._transport)
         self.router = AsyncRouter(self._transport)
         self.system = AsyncSystem(self._transport)
         self.api_keys = AsyncApiKeys(self._transport)

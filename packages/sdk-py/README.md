@@ -13,6 +13,7 @@ and asyncio (`AsyncCortex`) clients share the same API.
 - [Memory](#memory)
 - [Knowledge](#knowledge)
 - [Documents](#documents)
+- [Evidence](#evidence)
 - [Errors](#errors)
 - [Retries, timeouts, and request IDs](#retries-timeouts-and-request-ids)
 - [Middleware](#middleware)
@@ -259,6 +260,39 @@ PDF, DOCX, Markdown, and plain text are supported; the format is detected
 from the file name. Uploading identical content twice raises `ConflictError`,
 whose `document_id` is the existing copy. Ingestion calls default to a 120 s
 timeout.
+
+## Evidence
+
+Every completion is recorded as a decision linked to the evidence behind it.
+Look it up by the completion id:
+
+```python
+evidence = cortex.evidence.decision(completion.id)
+for item in evidence.supporting:
+    print(item.node.type, item.node.title, item.strength)
+
+graph = cortex.evidence.graph(completion.id, depth=3)
+graph.edges[0].provenance  # confidence, explanation, source, timestamp
+node = cortex.evidence.node(graph.nodes[1].id)  # neighbors + decisions it fed
+path = cortex.evidence.path(node.node.id, evidence.decision.id)
+
+cortex.evidence.record_decision(
+    title="Approve refund for order 1042",
+    source="policy-engine@3",
+    evidence=[
+        {
+            "type": "document",
+            "ref_id": doc_id,
+            "title": "Refund policy",
+            "explanation": "Inside the 30-day window",
+        },
+    ],
+)
+```
+
+`list_decisions()` and `iter_decisions()` page through decisions, newest
+first. `record_decision` is not retried; a repeat `ref_id` raises
+`ConflictError`.
 
 ## Errors
 

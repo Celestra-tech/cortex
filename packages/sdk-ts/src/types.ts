@@ -14,7 +14,13 @@ import type {
   ConversationCreate,
   ConversationDetail,
   ConversationListResponse,
+  DecisionCreate,
+  DecisionEvidence,
+  DecisionListResponse,
   DocumentCreate,
+  EvidenceGraph,
+  EvidenceNodeDetail,
+  EvidencePath,
   DocumentListResponse,
   KnowledgeDocument,
   KnowledgeSearchRequest,
@@ -321,5 +327,136 @@ export const modelListSchema = response<ModelListResponse>(
         allowed: z.boolean(),
       }),
     ),
+  }),
+);
+
+// --- Evidence -------------------------------------------------------------------------------------
+
+const evidenceNodeType = z.enum([
+  "decision",
+  "memory",
+  "message",
+  "conversation",
+  "document",
+  "chunk",
+  "knowledge",
+  "benchmark",
+]);
+const evidenceEdgeType = z.enum([
+  "supports",
+  "references",
+  "derived_from",
+  "retrieved_from",
+  "generated_by",
+  "contradicts",
+]);
+const unit = z.number().min(0).max(1);
+
+export const decisionCreateSchema = z.looseObject({
+  ref_id: id.nullable().optional(),
+  title: z.string().trim().min(1).max(500),
+  confidence: unit.nullable().optional(),
+  metadata: metadata.optional(),
+  source: z.string().trim().min(1).max(191).nullable().optional(),
+  evidence: z
+    .array(
+      z.looseObject({
+        type: evidenceNodeType,
+        ref_id: id.nullable().optional(),
+        title: z.string().trim().min(1).max(500),
+        confidence: unit.optional(),
+        metadata: metadata.optional(),
+        relation: evidenceEdgeType.optional(),
+        relation_confidence: unit.optional(),
+        explanation: z.string().trim().min(1).max(2000),
+        observed_at: timestamp.nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(200),
+}) satisfies z.ZodType<DecisionCreate>;
+
+const evidenceNode = z.looseObject({
+  id,
+  type: z.string(),
+  ref_id: id.nullable(),
+  title: z.string(),
+  confidence: z.number(),
+  created_at: timestamp,
+  occurred_at: timestamp,
+  metadata,
+});
+
+const evidenceEdge = z.looseObject({
+  id,
+  type: z.string(),
+  from_node_id: id,
+  to_node_id: id,
+  provenance: z.looseObject({
+    confidence: z.number(),
+    explanation: z.string(),
+    source: z.string(),
+    timestamp,
+  }),
+  created_at: timestamp,
+});
+
+export const decisionListSchema = response<DecisionListResponse>(page(evidenceNode));
+
+export const decisionEvidenceSchema = response<DecisionEvidence>(
+  z.looseObject({
+    decision: evidenceNode,
+    supporting: z.array(
+      z.looseObject({
+        node: evidenceNode,
+        depth: z.number(),
+        path_confidence: z.number(),
+        strength: z.number(),
+        path: z.array(id),
+      }),
+    ),
+    contradicting: z.array(z.looseObject({ node: evidenceNode, edge: evidenceEdge })),
+    counts: z.record(z.string(), z.number()),
+  }),
+);
+
+export const evidenceGraphSchema = response<EvidenceGraph>(
+  z.looseObject({
+    root_id: id,
+    depth: z.number(),
+    nodes: z.array(evidenceNode.extend({ depth: z.number() })),
+    edges: z.array(evidenceEdge),
+    timeline: z.array(
+      z.looseObject({
+        at: timestamp,
+        kind: z.string(),
+        id,
+        label: z.string(),
+        source: nullableString,
+        confidence: z.number(),
+      }),
+    ),
+    truncated: z.boolean(),
+  }),
+);
+
+const neighbor = z.looseObject({ edge: evidenceEdge, node: evidenceNode });
+
+export const evidenceNodeDetailSchema = response<EvidenceNodeDetail>(
+  z.looseObject({
+    node: evidenceNode,
+    upstream: z.array(neighbor),
+    downstream: z.array(neighbor),
+    decisions: z.array(z.looseObject({ node: evidenceNode, depth: z.number() })),
+  }),
+);
+
+export const evidencePathSchema = response<EvidencePath>(
+  z.looseObject({
+    source_id: id,
+    target_id: id,
+    connected: z.boolean(),
+    edges: z.array(evidenceEdge),
+    nodes: z.array(evidenceNode),
   }),
 );

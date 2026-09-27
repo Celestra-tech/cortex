@@ -8,6 +8,25 @@ export type {
   ApiKeyWithSecret,
 } from "./api-keys";
 export type {
+  Contradiction,
+  DecisionCreate,
+  DecisionEvidence,
+  DecisionListResponse,
+  EvidenceEdge,
+  EvidenceEdgeType,
+  EvidenceGraph,
+  EvidenceGraphNode,
+  EvidenceInput,
+  EvidenceNeighbor,
+  EvidenceNode,
+  EvidenceNodeDetail,
+  EvidenceNodeType,
+  EvidencePath,
+  EvidenceTimelineEvent,
+  Provenance,
+  SupportingEvidence,
+} from "./evidence";
+export type {
   DatabaseHealthResponse,
   DependencyCheck,
   DependencyName,
