@@ -4,7 +4,8 @@ from fastapi import APIRouter, Query
 
 from cortex_api.api.deps import OrganizationDep
 from cortex_api.database.session import DbSession
-from cortex_api.schemas.observatory import OrganizationRead, OverviewResponse
+from cortex_api.schemas.observatory import OverviewResponse
+from cortex_api.schemas.organization import OrganizationRead
 from cortex_api.services.observatory.overview import OverviewService
 
 router = APIRouter(tags=["observatory"])

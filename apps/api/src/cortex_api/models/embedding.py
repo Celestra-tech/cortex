@@ -5,7 +5,8 @@ from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import CheckConstraint, ForeignKey, Index, SmallInteger, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from cortex_api.database.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
+from cortex_api.database.base import Base
+from cortex_api.database.mixins import CreatedAtMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from cortex_api.models.document_chunk import DocumentChunk

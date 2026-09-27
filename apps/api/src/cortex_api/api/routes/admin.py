@@ -13,9 +13,9 @@ from cortex_api.schemas.api_key import (
     ApiKeyCreated,
     ApiKeyRead,
     OrganizationBootstrap,
-    OrganizationCreate,
+    OrganizationBootstrapCreate,
 )
-from cortex_api.schemas.observatory import OrganizationRead
+from cortex_api.schemas.organization import OrganizationRead
 from cortex_api.services.api_keys import ApiKeyService
 
 
@@ -44,7 +44,7 @@ router = APIRouter(
     "/organizations", response_model=OrganizationBootstrap, status_code=status.HTTP_201_CREATED
 )
 async def create_organization(
-    body: OrganizationCreate, session: DbSession
+    body: OrganizationBootstrapCreate, session: DbSession
 ) -> OrganizationBootstrap:
     """Create a tenant with its first admin API key (the secret is returned once)."""
     organizations = OrganizationRepository(session)

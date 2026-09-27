@@ -13,6 +13,10 @@ milestone and the alpha of the Production Runtime.
 
 ### Added
 
+- **Persistence.** PostgreSQL through async SQLAlchemy 2 and Alembic:
+  UUIDv7 keys, timestamp and soft-delete mixins, JSONB, indexed foreign keys,
+  a generic repository, validated organization and user schemas, and a
+  `/health/database` probe. `alembic check` guards against model drift.
 - **Router.** One completion API across OpenAI, Anthropic, Gemini, and
   OpenAI-compatible hosts. Objective-based model selection (`balanced`,
   `quality`, `speed`, `cost`), routing modes, organization routing policy,
