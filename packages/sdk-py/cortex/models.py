@@ -151,6 +151,44 @@ class IngestParams(TypedDict, total=False):
     chunking: ChunkingOptions
 
 
+EvidenceNodeType = Literal[
+    "decision", "memory", "message", "conversation", "document", "chunk", "knowledge", "benchmark"
+]
+EvidenceEdgeType = Literal[
+    "supports", "references", "derived_from", "retrieved_from", "generated_by", "contradicts"
+]
+Unit = Annotated[float, Field(ge=0, le=1)]
+
+
+@with_config(_loose)
+class EvidenceParams(TypedDict, total=False):
+    """One piece of evidence behind a recorded decision."""
+
+    type: Required[EvidenceNodeType]
+    ref_id: str | None
+    """Evidence with the same type and ref_id is shared across decisions."""
+    title: Required[Annotated[str, Field(min_length=1, max_length=500)]]
+    confidence: Unit
+    """How reliable the evidence is. Default 1."""
+    metadata: Metadata
+    relation: EvidenceEdgeType
+    """Default `supports`."""
+    relation_confidence: Unit
+    """How strongly the evidence bears on the decision. Default 1."""
+    explanation: Required[Annotated[str, Field(min_length=1, max_length=2000)]]
+    observed_at: datetime | None
+
+
+@with_config(_loose)
+class DecisionParams(TypedDict, total=False):
+    ref_id: str | None
+    title: Required[Annotated[str, Field(min_length=1, max_length=500)]]
+    confidence: Unit | None
+    metadata: Metadata
+    source: Annotated[str, Field(min_length=1, max_length=191)] | None
+    evidence: Required[Annotated[list[EvidenceParams], Field(min_length=1, max_length=200)]]
+
+
 # --- Responses -----------------------------------------------------------------------------------
 
 
@@ -619,3 +657,105 @@ class ProvidersHealth(CortexModel):
     available: int
     providers: list[ProviderHealth]
     embeddings: EmbeddingHealth
+
+
+# Evidence
+
+
+class EvidenceNode(CortexModel):
+    id: str
+    type: str
+    ref_id: str | None
+    """The record this node stands for: for completion decisions, the completion id."""
+    title: str
+    confidence: float
+    created_at: datetime
+    occurred_at: datetime
+    metadata: Metadata
+
+
+class Provenance(CortexModel):
+    confidence: float
+    explanation: str
+    source: str
+    """The component (`cortex.*`) or API key that asserted the link."""
+    timestamp: datetime
+
+
+class EvidenceEdge(CortexModel):
+    id: str
+    type: str
+    from_node_id: str
+    """Upstream: the evidence."""
+    to_node_id: str
+    """Downstream: what the evidence informed."""
+    provenance: Provenance
+    created_at: datetime
+
+
+class SupportingEvidence(CortexModel):
+    node: EvidenceNode
+    depth: int
+    path_confidence: float
+    strength: float
+    path: list[str]
+
+
+class Contradiction(CortexModel):
+    node: EvidenceNode
+    edge: EvidenceEdge
+
+
+class DecisionEvidence(CortexModel):
+    decision: EvidenceNode
+    supporting: list[SupportingEvidence]
+    contradicting: list[Contradiction]
+    counts: dict[str, int]
+
+
+class EvidenceGraphNode(EvidenceNode):
+    depth: int
+    """Signed hops from the root: negative upstream (evidence), positive downstream."""
+
+
+class EvidenceTimelineEvent(CortexModel):
+    at: datetime
+    kind: str
+    id: str
+    label: str
+    source: str | None
+    confidence: float
+
+
+class EvidenceGraph(CortexModel):
+    root_id: str
+    depth: int
+    nodes: list[EvidenceGraphNode]
+    edges: list[EvidenceEdge]
+    timeline: list[EvidenceTimelineEvent]
+    truncated: bool
+
+
+class EvidenceNeighbor(CortexModel):
+    edge: EvidenceEdge
+    node: EvidenceNode
+
+
+class ReachedDecision(CortexModel):
+    node: EvidenceNode
+    depth: int
+
+
+class EvidenceNodeDetail(CortexModel):
+    node: EvidenceNode
+    upstream: list[EvidenceNeighbor]
+    downstream: list[EvidenceNeighbor]
+    decisions: list[ReachedDecision]
+
+
+class EvidencePath(CortexModel):
+    source_id: str
+    target_id: str
+    connected: bool
+    edges: list[EvidenceEdge]
+    nodes: list[EvidenceNode]

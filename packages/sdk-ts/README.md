@@ -12,6 +12,7 @@ authentication, retries, streaming, and middleware built in.
 - [Memory](#memory)
 - [Knowledge](#knowledge)
 - [Documents](#documents)
+- [Evidence](#evidence)
 - [Errors](#errors)
 - [Retries, timeouts, and request IDs](#retries-timeouts-and-request-ids)
 - [Middleware](#middleware)
@@ -239,6 +240,37 @@ await cortex.documents.delete(doc.id);
 PDF, DOCX, Markdown, and plain text are supported. Uploading identical content
 twice throws `ConflictError`, whose `documentId` is the existing copy.
 Ingestion calls default to a 120 s timeout.
+
+## Evidence
+
+Every completion is recorded as a decision linked to the evidence behind it.
+Look it up by the completion id:
+
+```ts
+const { decision, supporting, contradicting } = await cortex.evidence.decision(completion.id);
+for (const item of supporting) console.log(item.node.type, item.node.title, item.strength);
+
+const graph = await cortex.evidence.graph(completion.id, { depth: 3 });
+graph.edges[0]?.provenance; // { confidence, explanation, source, timestamp }
+const node = await cortex.evidence.node(graph.nodes[1]!.id); // neighbors + decisions it fed
+const path = await cortex.evidence.path({ source: node.node.id, target: decision.id });
+
+await cortex.evidence.recordDecision({
+  title: "Approve refund for order 1042",
+  source: "policy-engine@3",
+  evidence: [
+    {
+      type: "document",
+      ref_id: docId,
+      title: "Refund policy",
+      explanation: "Inside the 30-day window",
+    },
+  ],
+});
+```
+
+`listDecisions()` and `iterDecisions()` page through decisions, newest first.
+`recordDecision` is not retried; a repeat `ref_id` throws `ConflictError`.
 
 ## Live events
 

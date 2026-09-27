@@ -56,6 +56,13 @@ test("renders one row per execution with outcome, latency, tokens, and cost", ()
   expect(within(rows[1]!).getByText("812 ms")).toBeInTheDocument();
   expect(within(rows[1]!).getByText("150")).toBeInTheDocument();
   expect(within(rows[1]!).getByText("$0.00048")).toBeInTheDocument();
+
+  // Only successful executions produced a decision with evidence to open.
+  expect(within(rows[0]!).getByRole("link", { name: /Evidence for completion/ })).toHaveAttribute(
+    "href",
+    "/evidence/01900000-0000-7000-8000-00000000c001",
+  );
+  expect(within(rows[1]!).queryByRole("link")).toBeNull();
 });
 
 test("explains the empty state", () => {

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cortex_api.database.ids import uuid7
-from cortex_api.models.message import MessageRole
+from cortex_api.models.message import Message, MessageRole
 from cortex_api.models.model_execution import ModelExecution
 from cortex_api.models.organization import Organization
 from cortex_api.repositories.execution_repository import ExecutionRepository
@@ -18,9 +18,12 @@ from cortex_api.schemas.completion import (
     TokenUsage,
 )
 from cortex_api.schemas.knowledge import KnowledgeUsage, context_read
+from cortex_api.schemas.memory import SessionMessage
+from cortex_api.services.evidence.linker import CompletionTrail, EvidenceLinker
 from cortex_api.services.knowledge.assembler import AssembledContext
 from cortex_api.services.knowledge.citations import CITATION_INSTRUCTIONS, cited_indices
 from cortex_api.services.knowledge.service import KnowledgeService, Retrieval
+from cortex_api.services.memory.retrieval import RankedMemory
 from cortex_api.services.memory.service import MemoryService
 from cortex_api.services.observatory.events import EventPublisher, EventType
 from cortex_api.services.router.base import ChatMessage
@@ -53,6 +56,7 @@ class CompletionService:
         memory: MemoryService,
         knowledge: KnowledgeService | None = None,
         events: EventPublisher | None = None,
+        evidence: EvidenceLinker | None = None,
     ) -> None:
         self.session = session
         self.router = router
@@ -60,6 +64,7 @@ class CompletionService:
         self.knowledge = knowledge
         self.events = events or EventPublisher(None)
         self.executions = ExecutionRepository(session)
+        self.evidence = evidence or EvidenceLinker(session)
 
     async def complete(
         self, organization: Organization, request: CompletionRequest
@@ -115,8 +120,9 @@ class CompletionService:
         policy = OrganizationPolicy.from_organization_settings(organization.settings)
         messages = [ChatMessage(m.role, m.content) for m in request.messages]
         memory_usage: dict[str, Any] | None = None
+        recalled = _Recall()
         if request.memory is not None:
-            messages, memory_usage = await self._with_memory(
+            messages, memory_usage, recalled = await self._with_memory(
                 organization.id, request.memory, messages
             )
         grounding = None
@@ -165,6 +171,7 @@ class CompletionService:
             raise
 
         knowledge_usage = None
+        cited: list[int] = []
         if grounding is not None and self.knowledge is not None:
             context = grounding.retrieval.context
             cited = (
@@ -184,7 +191,7 @@ class CompletionService:
                 cited=cited,
             )
 
-        await self._record(
+        rows = await self._record(
             organization.id,
             routed.id,
             routed.plan,
@@ -192,6 +199,32 @@ class CompletionService:
             request.metadata,
             routed,
             extra=extra,
+        )
+        winner = next(row for row in rows if row.success)
+        await self.evidence.record_completion(
+            organization.id,
+            CompletionTrail(
+                completion_id=routed.id,
+                created_at=routed.created_at,
+                prompt=_grounding_query(request),
+                provider=str(routed.spec.provider),
+                model=routed.spec.id,
+                objective=str(routed.plan.objective),
+                routing_mode=str(routed.plan.mode),
+                routing_reason=routed.routing_reason,
+                execution_id=winner.id,
+                latency_ms=routed.latency_ms,
+                prompt_tokens=routed.prompt_tokens,
+                completion_tokens=routed.completion_tokens,
+                cost_estimate=float(routed.cost_estimate),
+                attempts=len(routed.attempts),
+                conversation_id=request.memory.conversation_id if request.memory else None,
+                history=recalled.history,
+                memories=recalled.memories,
+                retrieval=grounding.retrieval if grounding else None,
+                grounding_applied=bool(grounding and grounding.applied),
+                cited=cited,
+            ),
         )
         await self.session.commit()
         await self.events.publish(
@@ -216,7 +249,11 @@ class CompletionService:
         )
 
         if request.memory is not None and request.memory.persist:
-            await self._persist(organization.id, request.memory.conversation_id, request, routed)
+            prompts, reply = await self._persist(
+                organization.id, request.memory.conversation_id, request, routed
+            )
+            await self.evidence.link_conversation_turns(organization.id, routed.id, prompts, reply)
+            await self.session.commit()
 
         return CompletionResponse(
             id=routed.id,
@@ -261,8 +298,9 @@ class CompletionService:
 
     async def _with_memory(
         self, organization_id: uuid.UUID, options: MemoryOptions, messages: list[ChatMessage]
-    ) -> tuple[list[ChatMessage], dict[str, Any]]:
-        """The grounded message list, plus what memory contributed (for the execution log)."""
+    ) -> tuple[list[ChatMessage], dict[str, Any], "_Recall"]:
+        """The grounded message list, what memory contributed (for the execution log), and
+        the exact messages and memories used (for the evidence graph)."""
         # Also validates that the conversation belongs to the organization.
         context = await self.memory.get_recent_context(organization_id, options.conversation_id)
         history = (
@@ -272,11 +310,14 @@ class CompletionService:
         )
 
         recalled: list[ChatMessage] = []
+        ranked: list[RankedMemory] = []
         memory_ids: list[str] = []
         query = next((m.content for m in reversed(messages) if m.role is MessageRole.USER), None)
         if options.memory_limit and query:
-            ranked = await self.memory.retrieve_memories(
-                organization_id, query=query, limit=options.memory_limit
+            ranked = list(
+                await self.memory.retrieve_memories(
+                    organization_id, query=query, limit=options.memory_limit
+                )
             )
             if ranked:
                 lines = "\n".join(f"- [{r.memory.type}] {r.memory.summary}" for r in ranked)
@@ -294,7 +335,11 @@ class CompletionService:
             "memory_ids": memory_ids,
             "persisted": options.persist,
         }
-        return [*system, *recalled, *history, *turns], usage
+        trail = _Recall(
+            history=tuple(context.messages) if options.include_history else (),
+            memories=tuple(ranked),
+        )
+        return [*system, *recalled, *history, *turns], usage, trail
 
     async def _persist(
         self,
@@ -302,25 +347,30 @@ class CompletionService:
         conversation_id: uuid.UUID,
         request: CompletionRequest,
         routed: RoutedCompletion,
-    ) -> None:
+    ) -> tuple[list[Message], Message | None]:
+        """The stored prompt turns and the stored reply."""
         link = {"completion_id": str(routed.id)}
+        prompts: list[Message] = []
+        reply: Message | None = None
         for message in request.messages:
             if message.role is not MessageRole.SYSTEM:
-                await self.memory.append_message(
+                stored = await self.memory.append_message(
                     organization_id,
                     conversation_id,
                     role=message.role,
                     content=message.content,
                     metadata=link,
                 )
+                prompts.append(stored)
         if routed.response.output:
-            await self.memory.append_message(
+            reply = await self.memory.append_message(
                 organization_id,
                 conversation_id,
                 role=MessageRole.ASSISTANT,
                 content=routed.response.output,
                 metadata={**link, "provider": str(routed.spec.provider), "model": routed.spec.id},
             )
+        return prompts, reply
 
     async def _record(
         self,
@@ -365,6 +415,12 @@ class CompletionService:
                 )
             )
         return await self.executions.record_many(rows)
+
+
+@dataclass(frozen=True, slots=True)
+class _Recall:
+    history: tuple[SessionMessage, ...] = ()
+    memories: tuple[RankedMemory, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

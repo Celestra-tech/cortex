@@ -1,3 +1,20 @@
 @import "@celestra/cortex-ui/globals.css";
 
 @source "../";
+
+/* React Flow reads these ahead of its own defaults, so the canvas follows the palette in both modes. */
+.react-flow {
+  --xy-background-color: var(--background);
+  --xy-background-pattern-color: var(--border);
+  --xy-edge-label-background-color: var(--background);
+  --xy-edge-label-color: var(--muted-foreground);
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--accent);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-controls-box-shadow: none;
+  --xy-minimap-background-color: var(--card);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--background) 65%, transparent);
+  --xy-minimap-node-background-color: var(--muted-foreground);
+}

@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { signOut } from "@/app/login/actions";
+import { AppHeader } from "@/components/app-header";
 import { ExecutionStats, ExecutionsTable } from "@/components/executions-table";
 import { cortexFor, requireSession } from "@/lib/auth";
 
@@ -65,21 +65,7 @@ export default async function ExecutionsPage({
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-6 sm:px-10">
-        <Link href="/" className="text-[13px] font-semibold tracking-[0.2em]">
-          CELESTRA
-        </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-muted-foreground" title={session.organizationId}>
-            {session.organizationName}
-          </span>
-          <form action={signOut}>
-            <Button type="submit" variant="link" size="sm" className="h-auto px-0">
-              Sign out
-            </Button>
-          </form>
-        </div>
-      </header>
+      <AppHeader session={session} current="/executions" />
 
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-6 pb-24 sm:px-10">
         <div className="pt-10">
