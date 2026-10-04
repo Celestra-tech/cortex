@@ -243,7 +243,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=6" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "redis", specifier = ">=6.4" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.43" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.37" },
 ]
 
