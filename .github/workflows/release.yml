@@ -42,10 +42,10 @@ jobs:
         run: |
           echo "::error::Run the release workflow on main (got ${GITHUB_REF})"
           exit 1
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.1"
       - name: Version
@@ -81,7 +81,7 @@ jobs:
           uvx --from 'git-cliff>=2.8,<3' git-cliff --unreleased --tag "${{ steps.version.outputs.tag }}" \
             --strip header --output release-notes.md
           cat release-notes.md >>"$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -125,7 +125,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
       - name: GitHub Release

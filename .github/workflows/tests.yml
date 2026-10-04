@@ -40,13 +40,13 @@ jobs:
       CORTEX_TEST_DATABASE_URL: postgresql+asyncpg://cortex:cortex@localhost:5432/celestra_cortex_test
       CORTEX_TEST_REDIS_URL: redis://localhost:6379/15
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.1"
           enable-cache: true
@@ -78,8 +78,8 @@ jobs:
       run:
         working-directory: apps/api
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.1"
           enable-cache: true
