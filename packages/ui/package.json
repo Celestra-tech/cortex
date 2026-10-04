@@ -31,8 +31,8 @@
     "@celestra/cortex-tsconfig": "workspace:*",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"
   }
